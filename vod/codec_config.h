@@ -23,6 +23,16 @@ typedef struct
 	u_char nula_length_size;
 } avcc_config_t;
 
+// from https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-bitstreams-within-the-iso-base-media-file-format-v2.0.pdf
+typedef struct
+{
+	u_int8_t dv_version_major;
+	u_int8_t dv_version_minor;
+	u_int8_t dv_profile;
+	u_int8_t dv_level;
+} dv_config_t;
+
+
 typedef struct
 {
 	uint8_t configurationVersion;

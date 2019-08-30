@@ -1,6 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
+#include "./mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -186,6 +187,39 @@ codec_config_hevc_config_parse(
 	return VOD_OK;
 }
 
+vod_status_t 
+codec_config_dv_hevc_config_parse(
+	request_context_t* request_context, 
+	vod_str_t* extra_data, 
+	dv_config_t* cfg, 
+	const u_char** end_pos)
+{
+	bit_reader_state_t reader;
+
+	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
+
+	// from https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-bitstreams-within-the-iso-base-media-file-format-v2.0.pdf
+	cfg->dv_version_major = bit_read_stream_get(&reader, 8);
+	cfg->dv_version_minor = bit_read_stream_get(&reader, 8);
+	cfg->dv_profile = bit_read_stream_get(&reader, 7);
+	cfg->dv_level = bit_read_stream_get(&reader, 6);
+
+	if (reader.stream.eof_reached)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_hevc_config_parse: overflow while parsing dolby vision hevc config");
+		return VOD_BAD_DATA;
+	}
+
+	if (end_pos != NULL)
+	{
+		*end_pos = reader.stream.cur_pos + (reader.cur_bit >= 0 ? 1 : 0);
+	}
+
+	return VOD_OK;
+}
+
+
 vod_status_t
 codec_config_hevc_get_nal_units(
 	request_context_t* request_context,
@@ -358,10 +392,28 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 {
 	vod_status_t rc;
 	hevc_config_t cfg;
+	dv_config_t dv_config;
 	u_char* p;
 	uint8_t c;
 	char profile_space[2] = { 0, 0 };
 	int shift;
+
+
+	// according to https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-streams-within-the-http-live-streaming-format-v2.0.pdf
+	// the Dolby Vision format stream should be in the format of:
+	// [Dolby_Vision_fourCC].[Dovi_Profile_ID].[Dovi_Level_ID]
+	if (media_info->format == FORMAT_DVH1) {
+		rc = codec_config_dv_hevc_config_parse(request_context, &media_info->extra_data, &dv_config, NULL);
+		vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "#### IT IS DoVi! %xD %xD", dv_config.dv_profile, dv_config.dv_level);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+		p = vod_sprintf(media_info->codec_name.data, "%*s.05.03", (size_t)sizeof(uint32_t), &media_info->format);
+		*p = '\0';
+		media_info->codec_name.len = p - media_info->codec_name.data;
+		return VOD_OK;
+	}
 
 	rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
 	if (rc != VOD_OK)
@@ -397,6 +449,7 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 		}
 		p = vod_sprintf(p, ".%02xD", (uint32_t)((cfg.constraint_indicator_flags >> shift) & 0xFF));
 	}
+
 	*p = '\0';
 
 	media_info->codec_name.len = p - media_info->codec_name.data;
