@@ -1,6 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
+#include "./mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -116,6 +117,40 @@ codec_config_avcc_get_nal_units(
 
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_avcc_get_nal_units: parsed extra data ", result->data, result->len);
 	return VOD_OK;
+}
+
+vod_status_t 
+codec_config_dovi_hevc_config_parse(
+	request_context_t* request_context, 
+	vod_str_t* extra_data, 
+	dovi_decoder_configuration_record_t* cfg, 
+	const u_char** end_pos)
+{
+	bit_reader_state_t reader;
+	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
+	if (reader.stream.eof_reached)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_dovi_hevc_config_parse: overflow while parsing dolby vision hevc config");
+		return VOD_BAD_DATA;
+	}
+
+	if (end_pos != NULL)
+	{
+		*end_pos = reader.stream.cur_pos + (reader.cur_bit >= 0 ? 1 : 0);
+	}
+
+	return VOD_OK;
+	// GF_DOVIConfigurationBox *ptr = (GF_DOVIConfigurationBox *)s;
+
+	// //GF_DOVIDecoderConfigurationRecord
+	// ptr->DOVIConfig.dv_version_major = gf_bs_read_u8(bs);
+	// ptr->DOVIConfig.dv_version_minor = gf_bs_read_u8(bs);
+	// ptr->DOVIConfig.dv_profile = gf_bs_read_int(bs, 7);
+	// ptr->DOVIConfig.dv_level = gf_bs_read_int(bs, 6);
+	// ptr->DOVIConfig.rpu_present_flag = gf_bs_read_int(bs, 1);
+	// ptr->DOVIConfig.el_present_flag = gf_bs_read_int(bs, 1);
+	// ptr->DOVIConfig.bl_present_flag = gf_bs_read_int(bs, 1);
 }
 
 // Note: taken from gf_odf_hevc_cfg_read_bs in GPAC code
@@ -358,45 +393,61 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 {
 	vod_status_t rc;
 	hevc_config_t cfg;
+	dovi_decoder_configuration_record_t dovi_cfg;
 	u_char* p;
 	uint8_t c;
 	char profile_space[2] = { 0, 0 };
 	int shift;
 
-	rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
-	if (rc != VOD_OK)
+	// according to https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-streams-within-the-http-live-streaming-format-v2.0.pdf
+	// the Dolby Vision format stream should be in the format of:
+	// [Dolby_Vision_fourCC].[Dovi_Profile_ID].[Dovi_Level_ID]
+	if (media_info->format == FORMAT_DVH1) 
 	{
-		return rc;
-	}
-
-	if (cfg.profile_space > 0)
-	{
-		profile_space[0] = 'A' + (cfg.profile_space - 1);
-	}
-
-	c = cfg.progressive_source_flag << 7;
-	c |= cfg.interlaced_source_flag << 6;
-	c |= cfg.non_packed_constraint_flag << 5;
-	c |= cfg.frame_only_constraint_flag << 4;
-	c |= (cfg.constraint_indicator_flags >> 40);
-
-	p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
-		(size_t)sizeof(uint32_t),
-		&media_info->format,
-		profile_space,
-		(uint32_t)cfg.profile_idc,
-		codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
-		(int)(cfg.tier_flag ? 'H' : 'L'),
-		(uint32_t)cfg.level_idc,
-		(uint32_t)c);
-	for (shift = 32; shift >= 0; shift -= 8)
-	{
-		if ((cfg.constraint_indicator_flags & (((uint64_t)1 << (shift + 8)) - 1)) == 0)
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "It is Dolby Vision.");
+		rc = codec_config_dovi_hevc_config_parse(request_context, &media_info->extra_data, &dovi_cfg, NULL);
+		if (rc != VOD_OK)
 		{
-			break;
+			return rc;
 		}
-		p = vod_sprintf(p, ".%02xD", (uint32_t)((cfg.constraint_indicator_flags >> shift) & 0xFF));
+		p = vod_sprintf(media_info->codec_name.data, "%*s.05.03", (size_t)sizeof(uint32_t), &media_info->format);
+	} else {
+		rc = codec_config_hevc_config_parse(request_context, &media_info->extra_data, &cfg, NULL);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+
+		if (cfg.profile_space > 0)
+		{
+			profile_space[0] = 'A' + (cfg.profile_space - 1);
+		}
+
+		c = cfg.progressive_source_flag << 7;
+		c |= cfg.interlaced_source_flag << 6;
+		c |= cfg.non_packed_constraint_flag << 5;
+		c |= cfg.frame_only_constraint_flag << 4;
+		c |= (cfg.constraint_indicator_flags >> 40);
+
+		p = vod_sprintf(media_info->codec_name.data, "%*s.%s%D.%xD.%c%D.%02xD",
+			(size_t)sizeof(uint32_t),
+			&media_info->format,
+			profile_space,
+			(uint32_t)cfg.profile_idc,
+			codec_config_flip_bits_32(cfg.general_profile_compatibility_flags),
+			(int)(cfg.tier_flag ? 'H' : 'L'),
+			(uint32_t)cfg.level_idc,
+			(uint32_t)c);
+		for (shift = 32; shift >= 0; shift -= 8)
+		{
+			if ((cfg.constraint_indicator_flags & (((uint64_t)1 << (shift + 8)) - 1)) == 0)
+			{
+				break;
+			}
+			p = vod_sprintf(p, ".%02xD", (uint32_t)((cfg.constraint_indicator_flags >> shift) & 0xFF));
+		}
 	}
+
 	*p = '\0';
 
 	media_info->codec_name.len = p - media_info->codec_name.data;

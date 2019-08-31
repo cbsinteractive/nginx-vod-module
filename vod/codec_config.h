@@ -60,6 +60,21 @@ typedef struct
 	uint16_t scalability_mask;
 } hevc_config_t;
 
+// from https://www.dolby.com/us/en/technologies/dolby-vision/dolby-vision-bitstreams-within-the-iso-base-media-file-format-v2.0.pdf
+// also referenced on https://github.com/gpac/gpac/blob/e1ef9af46ee8542f9a4ada117432377454e71dfa/include/gpac/internal/isomedia_dev.h#L1332
+typedef struct {
+	uint8_t dv_version_major;
+	uint8_t dv_version_minor;
+	uint8_t dv_profile; // 7 bits
+	uint8_t dv_level; // 6 bits
+	bool_t rpu_present_flag;
+	bool_t el_present_flag;
+	bool_t bl_present_flag;
+	uint8_t dv_bl_signal_compatibility_id; // 4 bits
+	// const unsigned int (28) reserved = 0;
+	// const unsigned int (32)[4] reserved = 0;
+} dovi_decoder_configuration_record_t;
+
 typedef struct {
 	uint8_t object_type;
 	uint8_t sample_rate_index;
