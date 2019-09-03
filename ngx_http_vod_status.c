@@ -12,7 +12,31 @@
 // constants
 #define PATH_PERF_COUNTERS_OPEN "<performance_counters>\r\n"
 #define PATH_PERF_COUNTERS_CLOSE "</performance_counters>\r\n"
+#define METADATA_CACHE_OPEN "<metadata_cache>\r\n"
+#define METADATA_CACHE_CLOSE "</metadata_cache>\r\n"
+#define RESPONSE_CACHE_OPEN "<response_cache>\r\n"
+#define RESPONSE_CACHE_CLOSE "</response_cache>\r\n"
+#define LIVE_RESPONSE_CACHE_OPEN "<live_response_cache>\r\n"
+#define LIVE_RESPONSE_CACHE_CLOSE "</live_response_cache>\r\n"
+#define MAPPING_CACHE_OPEN "<mapping_cache>\r\n"
+#define MAPPING_CACHE_CLOSE "</mapping_cache>\r\n"
+#define LIVE_MAPPING_CACHE_OPEN "<live_mapping_cache>\r\n"
+#define LIVE_MAPPING_CACHE_CLOSE "</live_mapping_cache>\r\n"
+#define DRM_INFO_CACHE_OPEN "<drm_info_cache>\r\n"
+#define DRM_INFO_CACHE_CLOSE "</drm_info_cache>\r\n"
+
 #define PERF_COUNTER_FORMAT "<sum>%uA</sum>\r\n<count>%uA</count>\r\n<max>%uA</max>\r\n<max_time>%uA</max_time>\r\n<max_pid>%uA</max_pid>\r\n"
+
+// constants
+static const u_char status_prefix[] = 
+	"<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n"
+	"<vod>\r\n"
+	"<version>" NGINX_VOD_VERSION "</version>\r\n";
+static const u_char status_postfix[] = "</vod>\r\n";
+
+static ngx_str_t xml_content_type = ngx_string("text/xml");
+static ngx_str_t text_content_type = ngx_string("text/plain");
+static ngx_str_t reset_response = ngx_string("OK\r\n");
 
 // typedefs
 typedef struct {
@@ -26,17 +50,6 @@ typedef struct {
 	int name_len;
 	int offset;
 } ngx_http_vod_stat_def_t;
-
-// constants
-static const u_char status_prefix[] = 
-	"<?xml version=\"1.0\" encoding=\"utf-8\" ?>\r\n"
-	"<vod>\r\n"
-	"<version>" NGINX_VOD_VERSION "</version>\r\n";
-static const u_char status_postfix[] = "</vod>\r\n";
-
-static ngx_str_t xml_content_type = ngx_string("text/xml");
-static ngx_str_t text_content_type = ngx_string("text/plain");
-static ngx_str_t reset_response = ngx_string("OK\r\n");
 
 static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 	DEFINE_STAT(store_ok),
@@ -57,33 +70,34 @@ static ngx_http_vod_stat_def_t buffer_cache_stat_defs[] = {
 static ngx_http_vod_cache_info_t cache_infos[] = {
 	{
 		offsetof(ngx_http_vod_loc_conf_t, metadata_cache),
-		ngx_string("<metadata_cache>\r\n"),
-		ngx_string("</metadata_cache>\r\n"),
+		ngx_string(METADATA_CACHE_OPEN),
+		ngx_string(METADATA_CACHE_CLOSE),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_VOD]),
-		ngx_string("<response_cache>\r\n"),
-		ngx_string("</response_cache>\r\n"),
+		ngx_string(RESPONSE_CACHE_OPEN),
+		ngx_string(RESPONSE_CACHE_CLOSE),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, response_cache[CACHE_TYPE_LIVE]),
-		ngx_string("<live_response_cache>\r\n"),
-		ngx_string("</live_response_cache>\r\n"),
+		ngx_string(LIVE_RESPONSE_CACHE_OPEN),
+		ngx_string(LIVE_RESPONSE_CACHE_CLOSE),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, mapping_cache[CACHE_TYPE_VOD]),
-		ngx_string("<mapping_cache>\r\n"),
-		ngx_string("</mapping_cache>\r\n"),
+		ngx_string(MAPPING_CACHE_OPEN),
+		ngx_string(MAPPING_CACHE_CLOSE),
 	},
 	{
 		offsetof(ngx_http_vod_loc_conf_t, mapping_cache[CACHE_TYPE_LIVE]),
-		ngx_string("<live_mapping_cache>\r\n"),
-		ngx_string("</live_mapping_cache>\r\n"),
+		ngx_string(LIVE_MAPPING_CACHE_OPEN),
+		ngx_string(LIVE_MAPPING_CACHE_CLOSE),
 	},
 	{
+#define DRM_INFO_CACHE_OPEN "<drm_info_cache>\r\n"
 		offsetof(ngx_http_vod_loc_conf_t, drm_info_cache),
-		ngx_string("<drm_info_cache>\r\n"),
-		ngx_string("</drm_info_cache>\r\n"),
+		ngx_string(DRM_INFO_CACHE_OPEN),
+		ngx_string(DRM_INFO_CACHE_CLOSE),
 	},
 };
 
