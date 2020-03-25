@@ -39,6 +39,7 @@ enum {
 	MEDIA_SET_PARAM_NOTIFICATIONS,
 	MEDIA_SET_PARAM_CLIP_FROM,
 	MEDIA_SET_PARAM_CLIP_TO,
+	MEDIA_SET_PLACE_OPPORTUNITY,
 
 	MEDIA_SET_PARAM_COUNT
 };
@@ -138,6 +139,7 @@ static json_object_key_def_t media_clip_params[] = {
 static json_object_key_def_t media_set_params[] = {
 	{ vod_string("id"),								VOD_JSON_STRING,MEDIA_SET_PARAM_ID },
 	{ vod_string("discontinuity"),					VOD_JSON_BOOL,	MEDIA_SET_PARAM_DISCONTINUITY },
+	{ vod_string("placementOpportunity"),			VOD_JSON_BOOL,	MEDIA_SET_PLACE_OPPORTUNITY },
 	{ vod_string("segmentDuration"),				VOD_JSON_INT,	MEDIA_SET_PARAM_SEGMENT_DURATION },
 	{ vod_string("consistentSequenceMediaInfo"),	VOD_JSON_BOOL,	MEDIA_SET_PARAM_CONSISTENT_SEQUENCE_MEDIA_INFO },
 	{ vod_string("durations"),						VOD_JSON_ARRAY, MEDIA_SET_PARAM_DURATIONS },
@@ -2325,6 +2327,19 @@ media_set_parse_json(
 	{
 		result->original_use_discontinuity = TRUE;
 	}
+
+	// discontinuity
+	if (params[MEDIA_SET_PARAM_DISCONTINUITY] != NULL)
+	{
+		result->original_use_discontinuity = params[MEDIA_SET_PARAM_DISCONTINUITY]->v.boolean;
+	}
+	else
+	{
+		result->original_use_discontinuity = TRUE;
+	}
+
+	// force placing custom param for ad opportunities
+	result->use_placement_opportunity = TRUE;
 
 	if ((request_flags & REQUEST_FLAG_NO_DISCONTINUITY) != 0)
 	{

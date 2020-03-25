@@ -117,6 +117,7 @@ typedef struct {
 	uint32_t original_type;					// will contain live in case of a live playlist that was forced to vod
 	media_clip_timing_t timing;
 	bool_t original_use_discontinuity;		// will be different than use_discontinuity in case force_continuous_timestamps is enabled
+	bool_t use_placement_opportunity;
 	bool_t use_discontinuity;
 	bool_t presentation_end;
 
