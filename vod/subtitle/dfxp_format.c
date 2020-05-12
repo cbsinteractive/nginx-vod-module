@@ -17,6 +17,7 @@
 #define DFXP_ELEMENT_P (u_char*)"p"
 #define DFXP_ELEMENT_BR (u_char*)"br"
 #define DFXP_ELEMENT_SPAN (u_char*)"span"
+#define DFXP_ELEMENT_DIV (u_char*)"div"
 
 #define DFXP_ATTR_BEGIN (u_char*)"begin"
 #define DFXP_ATTR_END (u_char*)"end"
@@ -225,46 +226,42 @@ dfxp_parse_timestamp(u_char* ts)
 	return -1;
 }
 
-static int64_t 
-dfxp_get_end_time(xmlNode *cur_node)
+typedef struct{
+	int64_t start_time;
+	int64_t end_time;
+	int64_t duration;
+} dfxp_timestamp;
+
+int64_t
+dfxp_parse_timestamp0(xmlNode *node, xmlChar *name, int64_t *ts)
 {
-	xmlChar* attr;
-	int64_t begin;
-	int64_t dur;
-	
-	// prefer the end attribute
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_END);
-	if (attr != NULL)
-	{
-		return dfxp_parse_timestamp(attr);
-	}
-	
-	// fall back to dur + start
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_DUR);
-	if (attr == NULL)
-	{
-		return -1;
-	}
-	
-	dur = dfxp_parse_timestamp(attr);
-	if (dur < 0)
-	{
-		return -1;
-	}
-	
-	attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
-	if (attr == NULL)
-	{
-		return -1;
-	}
-	
-	begin = dfxp_parse_timestamp(attr);
-	if (begin < 0)
-	{
-		return -1;
-	}
-	
-	return begin + dur;
+	*ts = -1;
+	xmlChar* attr = dfxp_get_xml_prop(node, name);
+	if (attr == NULL) return -1;
+	*ts =  dfxp_parse_timestamp(attr);
+	return *ts;
+}
+
+int
+dfxp_extract_time(xmlNode *node, dfxp_timestamp *t)
+{
+	dfxp_parse_timestamp0(node, DFXP_ATTR_BEGIN, &t->start_time);
+	dfxp_parse_timestamp0(node, DFXP_ATTR_END, &t->end_time);
+	dfxp_parse_timestamp0(node, DFXP_ATTR_DUR, &t->duration);
+
+	if (t->start_time < 0) return 0;
+	if (t->end_time < 0) t->end_time = t->start_time+t->duration;
+	if (t->duration < 0) t->duration = t->end_time-t->start_time;
+
+	return 1;
+}
+
+int64_t
+dfxp_clamp(int64_t v, int64_t lo, int64_t hi)
+{
+	if (v < lo)  return lo;
+	if (v > hi)  return hi;
+	return v;
 }
 
 static uint64_t
