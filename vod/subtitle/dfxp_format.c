@@ -273,7 +273,7 @@ dfxp_get_duration(xmlDoc *doc)
 	unsigned node_stack_pos = 0;
 	int nodes_left = DFXP_DURATION_ESTIMATE_NODES;
 	int64_t result = 0;
-	int64_t cur;
+	dfxp_timestamp ts = {0};
 
 	for (cur_node = xmlDocGetRootElement(doc); ; cur_node = cur_node->prev)
 	{
@@ -294,6 +294,16 @@ dfxp_get_duration(xmlDoc *doc)
 			continue;
 		}
 
+		// timestamp information can be inside a div tag too
+		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_DIV) == 0)
+		{
+			dfxp_extract_time(cur_node, &ts);
+			if (ts.end_time > result)
+			{
+				result = ts.end_time;
+			}
+		}
+
 		// recurse into non-p nodes
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
@@ -309,11 +319,11 @@ dfxp_get_duration(xmlDoc *doc)
 			continue;
 		}
 
-		// get the end time of this p node
-		cur = dfxp_get_end_time(cur_node);
-		if (cur > result)
+		// timestamp information can be inside a p tag
+		dfxp_extract_time(cur_node, &ts);
+		if (ts.end_time > result)
 		{
-			result = cur;
+			result = ts.end_time;
 		}
 
 		nodes_left--;
