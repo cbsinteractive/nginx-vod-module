@@ -704,13 +704,13 @@ dfxp_parse_frames(
 	uint64_t start;
 	uint64_t end;
 	int64_t last_start_time = 0;
-	int64_t start_time = 0;
-	int64_t end_time = 0;
-	int64_t duration;
+
+	dfxp_timestamp t = {0};
+
 	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
 	xmlNode* cur_node;
+	xmlNode* last_div = NULL;
 	xmlNode temp_node;
-	xmlChar* attr;
 	unsigned node_stack_pos = 0;
 	vod_str_t text;
 	vod_status_t rc;
@@ -763,8 +763,8 @@ dfxp_parse_frames(
 			{
 				if (cur_frame != NULL)
 				{
-					cur_frame->duration = end_time - start_time;
-					track->total_frames_duration = end_time - track->first_frame_time_offset;
+					cur_frame->duration = t.end_time - t.start_time;
+					track->total_frames_duration = t.end_time - track->first_frame_time_offset;
 				}
 				break;
 			}
@@ -780,10 +780,15 @@ dfxp_parse_frames(
 
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
-			if (cur_node->children == NULL ||
-				node_stack_pos >= vod_array_entries(node_stack))
+			if (cur_node->children == NULL || node_stack_pos >= vod_array_entries(node_stack))
 			{
 				continue;
+			}
+
+			// NOTE(as): It's a div, so save it in case the p-tag doesn't have the time inside 
+			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_DIV) == 0)
+			{
+				last_div = cur_node;
 			}
 
 			node_stack[node_stack_pos++] = cur_node;
@@ -792,94 +797,29 @@ dfxp_parse_frames(
 			continue;
 		}
 
-		// handle p element
-		attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_END);
-		if (attr != NULL)
+		// handle p element or the last-visited div
+		if (!dfxp_extract_time(cur_node, &t))
 		{
-			// has end time
-			end_time = dfxp_parse_timestamp(attr);
-			if (end_time < 0)
-			{
-				continue;
-			}
-
-			if ((uint64_t)end_time < start)
-			{
-				track->first_frame_index++;
-				continue;
-			}
-
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
-			if (attr == NULL)
-			{
-				continue;
-			}
-
-			start_time = dfxp_parse_timestamp(attr);
-			if (start_time < 0)
+			if (last_div == NULL || !dfxp_extract_time(last_div, &t))
 			{
 				continue;
 			}
 		}
-		else
+
+		if ((uint64_t)t.end_time < start)
 		{
-			// no end time
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_DUR);
-			if (attr == NULL)
-			{
-				continue;
-			}
-
-			duration = dfxp_parse_timestamp(attr);
-			if (duration < 0)
-			{
-				continue;
-			}
-
-			attr = dfxp_get_xml_prop(cur_node, DFXP_ATTR_BEGIN);
-			if (attr == NULL)
-			{
-				continue;
-			}
-
-			start_time = dfxp_parse_timestamp(attr);
-			if (start_time < 0)
-			{
-				continue;
-			}
-
-			end_time = start_time + duration;
-			if ((uint64_t)end_time < start)
-			{
 				track->first_frame_index++;
 				continue;
-			}
 		}
 
-		if (start_time >= end_time)
+		if (t.start_time >= t.end_time)
 		{
 			continue;
 		}
 
 		// apply clipping
-		if (start_time >= (int64_t)base_time)
-		{
-			start_time -= base_time;
-			if ((uint64_t)start_time > clip_to)
-			{
-				start_time = clip_to;
-			}
-		}
-		else
-		{
-			start_time = 0;
-		}
-
-		end_time -= base_time;
-		if ((uint64_t)end_time > clip_to)
-		{
-			end_time = clip_to;
-		}
+		t.start_time = dfxp_clamp(t.start_time - base_time, 0, clip_to);
+		t.end_time = dfxp_clamp(t.end_time - base_time, 0, clip_to);
 
 		// get the text
 		rc = dfxp_get_frame_body(
@@ -901,16 +841,16 @@ dfxp_parse_frames(
 		// adjust the duration of the previous frame
 		if (cur_frame != NULL)
 		{
-			cur_frame->duration = start_time - last_start_time;
+			cur_frame->duration = t.start_time - last_start_time;
 		}
 		else
 		{
-			track->first_frame_time_offset = start_time;
+			track->first_frame_time_offset = t.start_time;
 		}
 
-		if ((uint64_t)start_time >= end)
+		if ((uint64_t)t.start_time >= end)
 		{
-			track->total_frames_duration = start_time - track->first_frame_time_offset;
+			track->total_frames_duration = t.start_time - track->first_frame_time_offset;
 			break;
 		}
 
@@ -925,11 +865,11 @@ dfxp_parse_frames(
 
 		cur_frame->offset = (uintptr_t)text.data;
 		cur_frame->size = text.len;
-		cur_frame->pts_delay = end_time - start_time;
+		cur_frame->pts_delay = t.end_time - t.start_time;
 		cur_frame->key_frame = 0;
 		track->total_frames_size += cur_frame->size;
 
-		last_start_time = start_time;
+		last_start_time = t.start_time;
 	}
 
 	track->frame_count = frames.nelts;
