@@ -481,6 +481,8 @@ dfxp_append_string(u_char* p, u_char* s)
 	return p;
 }
 
+#define DFXP_TEXT_DECORATION_OVERHEAD 30
+
 static size_t
 dfxp_get_text_content_len(xmlNode* cur_node)
 {
@@ -534,14 +536,57 @@ dfxp_get_text_content_len(xmlNode* cur_node)
 		cur_node = cur_node->next;
 	}
 
-	return result;
+	return result + DFXP_TEXT_DECORATION_OVERHEAD;
 }
+
+
+static int
+dfxp_has_attr_value(xmlNode* n, char* name, char* value)
+{
+	xmlChar* attr = dfxp_get_xml_prop(n, (u_char *) name);
+	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
+}
+
+// 00000001	- bold
+// 00000010	- italic
+// 00000100	- underline
+static char
+dfxp_add_textflags(xmlNode* n, char flag)
+{ 
+	flag |= dfxp_has_attr_value(n, "fontWeight", "bold") << 1;
+	flag |= dfxp_has_attr_value(n, "fontStyle", "italic") << 2;
+	flag |= dfxp_has_attr_value(n, "textDecoration", "underline") << 3;
+	return flag;
+}
+
+static char *decoration[] = {
+	"<b>","</b>",
+	"<i>","</i>",
+	"<u>","</u>",
+};
+
+static u_char* 
+dfxp_append_decoration(u_char* p, char flag, int close)
+{
+	for (int i = 0; i < 3; i++)
+	{
+		if (flag & (1<<i))
+		{
+			p = dfxp_append_string(p, (u_char *) decoration[i*2+close]);
+		}
+	}
+	return p;
+}
+
 
 static u_char* 
 dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 {
 	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
 	unsigned node_stack_pos = 0;
+
+	char parent_flag = 0;
+	char flag = 0;
 
 	for (;;)
 	{
@@ -561,7 +606,9 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
+			p = dfxp_append_decoration(p, flag, 0);
 			p = dfxp_append_string(p, cur_node->content);
+			p = dfxp_append_decoration(p, flag, 1);
 			break;
 
 		case XML_ELEMENT_NODE:
@@ -577,6 +624,8 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 			{
 				break;
 			}
+			
+			flag = dfxp_add_textflags(cur_node, parent_flag);
 
 			node_stack[node_stack_pos++] = cur_node->next;
 			cur_node = cur_node->children;
