@@ -547,32 +547,34 @@ dfxp_has_attr_value(xmlNode* n, char* name, char* value)
 	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
 }
 
+static struct{char *name, *attr; char *tag[2];} decoration[] = {
+	{"bold", "fontWeight", {"<b>","</b>"}},
+	{"italic", "fontStyle", {"<i>","</i>"}},
+	{"underline", "textDecoration", {"<u>","</u>"}},
+	{NULL},
+};
+
 // 00000001	- bold
 // 00000010	- italic
 // 00000100	- underline
 static char
 dfxp_add_textflags(xmlNode* n, char flag)
 { 
-	flag |= dfxp_has_attr_value(n, "fontWeight", "bold") << 1;
-	flag |= dfxp_has_attr_value(n, "fontStyle", "italic") << 2;
-	flag |= dfxp_has_attr_value(n, "textDecoration", "underline") << 3;
+	for (int i = 0; decoration[i].name != NULL; i++)
+	{
+		flag |= dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name) << (i+1);
+	}
 	return flag;
 }
-
-static char *decoration[] = {
-	"<b>","</b>",
-	"<i>","</i>",
-	"<u>","</u>",
-};
 
 static u_char* 
 dfxp_append_decoration(u_char* p, char flag, int close)
 {
-	for (int i = 0; i < 3; i++)
+	for (int i = 0; decoration[i].name != NULL; i++)
 	{
 		if (flag & (1<<i))
 		{
-			p = dfxp_append_string(p, (u_char *) decoration[i*2+close]);
+			p = dfxp_append_string(p, (u_char *) decoration[i].tag[close]);
 		}
 	}
 	return p;
