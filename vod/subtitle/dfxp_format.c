@@ -554,9 +554,11 @@ static struct{char *name, *attr; char *tag[2];} decoration[] = {
 	{NULL},
 };
 
-// 00000001	- bold
-// 00000010	- italic
-// 00000100	- underline
+// dfxp_add_textflags ORs any decorations flags founds in the xmlNode
+// in the flag bits and returns flag:
+// 	00000001	- bold
+// 	00000010	- italic
+// 	00000100	- underline
 static char
 dfxp_add_textflags(xmlNode* n, char flag)
 { 
@@ -567,6 +569,8 @@ dfxp_add_textflags(xmlNode* n, char flag)
 	return flag;
 }
 
+// dfxp_append_decoration applies the decorations flag bits to p
+// and returns p
 static u_char* 
 dfxp_append_decoration(u_char* p, char flag, int close)
 {
