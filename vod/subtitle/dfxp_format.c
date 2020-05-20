@@ -481,7 +481,7 @@ dfxp_append_string(u_char* p, u_char* s)
 	return p;
 }
 
-#define DFXP_TEXT_DECORATION_OVERHEAD 30
+#define DFXP_TEXT_DECORATION_OVERHEAD 64
 
 static size_t
 dfxp_get_text_content_len(xmlNode* cur_node)
@@ -564,7 +564,7 @@ dfxp_add_textflags(xmlNode* n, char flag)
 { 
 	for (int i = 0; decoration[i].name != NULL; i++)
 	{
-		flag |= dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name) << (i+1);
+		flag |= dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name) << i;
 	}
 	return flag;
 }
