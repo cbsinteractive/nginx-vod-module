@@ -562,6 +562,7 @@ typedef struct{
 	style style;
 } region;
 
+/** commented out because the makefile complains about unused symbols
 // NOTE:(as) these are very specific to our usecase [for PoC purposes only]
 static style style_defaults[] = {
 	{"defaultSpeaker", 1, {0, 0}},
@@ -582,6 +583,8 @@ dfxp_style_merge(style* dst, style* src)
 	dst->align = src->align;
 	return dst;
 }
+
+**/
 
 static struct{char *name, *attr; char *tag[2];} decoration[] = {
 	{"bold", "fontWeight", {"<b>","</b>"}},
@@ -686,6 +689,8 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
 	return p;
 }
 
+#define TMP_TEST_TEXT ((u_char*) "position:15% align:start")
+
 static vod_status_t
 dfxp_get_frame_body(
 	request_context_t* request_context, 
@@ -703,6 +708,7 @@ dfxp_get_frame_body(
 		return VOD_NOT_FOUND;
 	}
 
+	alloc_size += sizeof(TMP_TEST_TEXT);
 	alloc_size += 3;		// \n * 3
 
 	// get the text content
@@ -714,9 +720,11 @@ dfxp_get_frame_body(
 		return VOD_ALLOC_FAILED;
 	}
 
-	start++;	// save space for prepending \n
-
-	end = dfxp_append_text_content(cur_node, start, 0);	// TODO(as): decoration input
+	start++;	// save space for prepending space
+	// see if we can generate something after the cue without modifying webvtt files
+	end = dfxp_append_string(start, TMP_TEST_TEXT);
+	end = dfxp_append_text_content(cur_node, end, 0);	// TODO(as): decoration input
+//	end = dfxp_append_text_content(cur_node, start, 0);	// TODO(as): decoration input
 	if ((size_t)(end - start + 2) > alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -758,7 +766,7 @@ dfxp_get_frame_body(
 
 	// add leading/trailing newlines
 	start--;
-	*start = '\n';
+	*start = ' ';
 	*end++ = '\n';
 	*end++ = '\n';
 
