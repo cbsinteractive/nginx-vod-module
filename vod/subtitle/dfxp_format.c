@@ -593,6 +593,27 @@ static struct{char *name, *attr; char *tag[2];} decoration[] = {
 	{NULL},
 };
 
+/** works, but note used by code yet, uncomment to use
+
+// textalign and displayalign are rulesets on how we convert between
+// dfxp tags to webvtt values.
+static struct{char *name, *attr, *vtt;} textalign[] = {
+	{"start", "textAlign", "align=start position=15%"},
+	{"left", "textAlign", "align=start position=15%"},
+	{"center", "textAlign", "align=middle position=50%"},
+	{"right", "textAlign", "align=end position=85%"},
+	{"end", "textAlign", "align=end position=85%"},
+	{NULL},
+};
+
+static struct{char *name, *attr, *vtt;} displayalign[] = {
+	{"before", "displayAlign", "align=start position=15%"},
+	{"center", "displayAlign", "align=start position=15%"},
+	{"after", "displayAlign", "align=middle position=50%"},
+	{NULL},
+};
+**/
+
 // dfxp_add_textflags ORs any decorations flags founds in the xmlNode
 // in the flag bits and returns flag:
 // 	00000001	- bold
@@ -607,6 +628,33 @@ dfxp_add_textflags(xmlNode* n, char flag)
 	}
 	return flag;
 }
+
+/** works, but note used by code yet, uncomment to use
+// dfxp_parse_style extracts alignment, display, and decoration
+// attributes and applies it to the style
+static style*
+dfxp_parse_style(xmlNode* n, style *s)
+{ 
+	for (int i = 0; displayalign[i].name != NULL; i++)
+	{
+		if (dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name))
+		{
+			// TODO(as): set
+			break;
+		}
+	}
+	for (int i = 0; textalign[i].name != NULL; i++)
+	{
+		if (dfxp_has_attr_value(n, textalign[i].attr, textalign[i].name))
+		{
+			// TODO(as): set
+			break;
+		}
+	}
+	s->decoration = dfxp_add_textflags(n, s->decoration);
+	return s;
+}
+**/
 
 // dfxp_append_decoration applies the decorations flag bits to p
 // and returns p
