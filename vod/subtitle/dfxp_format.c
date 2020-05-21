@@ -708,7 +708,9 @@ dfxp_get_frame_body(
 		return VOD_NOT_FOUND;
 	}
 
+	// NOTE(as): cue trailer: 1/2: make room for things like 'position:15% align:start'
 	alloc_size += sizeof(TMP_TEST_TEXT);
+
 	alloc_size += 3;		// \n * 3
 
 	// get the text content
@@ -720,11 +722,20 @@ dfxp_get_frame_body(
 		return VOD_ALLOC_FAILED;
 	}
 
-	start++;	// save space for prepending space
-	// see if we can generate something after the cue without modifying webvtt files
+	start++;	// save space for prepending space (used to be a newline)
+
+	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
 	end = dfxp_append_string(start, TMP_TEST_TEXT);
-	end = dfxp_append_text_content(cur_node, end, 0);	// TODO(as): decoration input
-//	end = dfxp_append_text_content(cur_node, start, 0);	// TODO(as): decoration input
+
+	// NOTE(as): this routine looks at text, including spans, at first it seems like it
+	// only needs the decorations, i.e., bold, italics, underlines. The last argument has
+	// indeed been retrofitted with the flag byte, however, the spans can refer to named
+	// regions, which have styles defined inside of them. This means this function below
+	// will also need to take a list or array of regions to determine which ones the span
+	// inherits from. However, since the alignments are defined at the cue level, it appears
+	// we can only support passing in decorations associated with named regions for this
+	// function.
+	end = dfxp_append_text_content(cur_node, end, 0);	
 	if ((size_t)(end - start + 2) > alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
