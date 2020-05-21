@@ -547,6 +547,42 @@ dfxp_has_attr_value(xmlNode* n, char* name, char* value)
 	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
 }
 
+
+typedef struct{
+	char* id;
+	char decoration; 	// 1=bold, 2=italic, 4=underline
+	struct align{
+		char display;	// 0=center, 1=before, 2=after
+		char text;		// 0=center, 1=left, 2=right
+	} align;
+} style;
+
+typedef struct{
+	char* id;
+	style style;
+} region;
+
+// NOTE:(as) these are very specific to our usecase [for PoC purposes only]
+static style style_defaults[] = {
+	{"defaultSpeaker", 1, {0, 0}},
+	{"block", 0, {0, 0}},
+	{"rollup", 0, {0, 0}},
+	{NULL},
+};
+
+// dfxp_style_merge merges dst with src, modifying dst
+// and returning it.
+//
+// Given two styles, x and y, define x * y:
+// x * y = style{ x.decoration | y.decoration,  x.align = y.align }
+static style*
+dfxp_style_merge(style* dst, style* src)
+{
+	dst->decoration |= src->decoration;
+	dst->align = src->align;
+	return dst;
+}
+
 static struct{char *name, *attr; char *tag[2];} decoration[] = {
 	{"bold", "fontWeight", {"<b>","</b>"}},
 	{"italic", "fontStyle", {"<i>","</i>"}},
@@ -586,14 +622,13 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 
 
 static u_char* 
-dfxp_append_text_content(xmlNode* cur_node, u_char* p)
+dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
 {
 	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
 	unsigned node_stack_pos = 0;
 
-	char parent_flag = 0;
-	char flag = 0;
-
+	char lflag = 0;	// local to <span> tags
+	
 	for (;;)
 	{
 		// traverse the tree dfs order
@@ -605,6 +640,10 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 			}
 
 			cur_node = node_stack[--node_stack_pos];
+			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) != 0)
+			{
+				lflag = flag;
+			}
 			continue;
 		}
 
@@ -612,9 +651,9 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
-			p = dfxp_append_decoration(p, flag, 0);
+			p = dfxp_append_decoration(p, lflag, 0);
 			p = dfxp_append_string(p, cur_node->content);
-			p = dfxp_append_decoration(p, flag, 1);
+			p = dfxp_append_decoration(p, lflag, 1);
 			break;
 
 		case XML_ELEMENT_NODE:
@@ -631,7 +670,7 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p)
 				break;
 			}
 			
-			flag = dfxp_add_textflags(cur_node, parent_flag);
+			lflag = dfxp_add_textflags(cur_node, flag);
 
 			node_stack[node_stack_pos++] = cur_node->next;
 			cur_node = cur_node->children;
@@ -677,7 +716,7 @@ dfxp_get_frame_body(
 
 	start++;	// save space for prepending \n
 
-	end = dfxp_append_text_content(cur_node, start);
+	end = dfxp_append_text_content(cur_node, start, 0);	// TODO(as): decoration input
 	if ((size_t)(end - start + 2) > alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
