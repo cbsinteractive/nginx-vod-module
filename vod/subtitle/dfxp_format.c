@@ -672,7 +672,7 @@ dfxp_can_contain_style(xmlNode* n, char flag)
 		if (vod_strcmp(n->name, (u_char *) syle_containers[i]) == 0)
 			return 1;
 
-	return 0
+	return 0;
 }
 
 // dfxp_add_textflags ORs any decorations flags founds in the xmlNode
@@ -914,7 +914,18 @@ dfxp_parse_frames(
 	vod_str_t text;
 	vod_status_t rc;
 
+//	struct{xmlNode* n; style s;} style_stack[DFXP_MAX_STACK_DEPTH];
+
+	unsigned style_stack_pos = 0;
 	style style = {0};
+
+	// NOTE(as): just testing to see if it works, need to make use of style_stack
+	// this is building the equivalent of "defaultSpeaker"
+	style.decoration = DECO_BOLD|DECO_ITALIC|DECO_UNDERLINE;
+	style.align.text = textalign[TA_CENTER].vtt;
+	style.align.display = displayalign[DA_CENTER].vtt;
+
+//	style_stack[0].n = NULL; style_stack[0].s = style
 
 	// initialize the result
 	vod_memzero(result, sizeof(*result));
@@ -975,6 +986,9 @@ dfxp_parse_frames(
 			{
 				last_div = NULL;
 			}
+			
+			// TODO(as): Check whether cur_node matches the node in the style
+			// stack, and pop it if it does, reverting to the previous style
 			continue;
 		}
 
@@ -982,6 +996,9 @@ dfxp_parse_frames(
 		{
 			continue;
 		}
+
+		// TODO(as): Check whether this node can have style information associated with
+		// it, if it does merge the style and push it onto the stack
 
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
@@ -1025,6 +1042,11 @@ dfxp_parse_frames(
 		// apply clipping
 		t.start_time = dfxp_clamp(t.start_time - base_time, 0, clip_to);
 		t.end_time = dfxp_clamp(t.end_time - base_time, 0, clip_to);
+
+		//
+		// TODO(as): consolidate the style variable with the style stack
+		// and pass it into dfxp_get_frame_body
+		//
 
 		// get the text
 		rc = dfxp_get_frame_body(
