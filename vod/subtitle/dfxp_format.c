@@ -481,6 +481,7 @@ dfxp_append_string(u_char* p, u_char* s)
 	return p;
 }
 
+// TODO(as): this needs to be dynamic
 #define DFXP_TEXT_DECORATION_OVERHEAD 64
 
 static size_t
@@ -624,15 +625,35 @@ static style*
 dfxp_style_merge(style* dst, style* src)
 {
 	dst->decoration |= src->decoration;
-	dst->align = src->align;
+	if (src->align.display)
+		dst->align.display = src->align.display;
+	if (src->align.text)
+		dst->align.text = src->align.text;
 	return dst;
+}
+
+static char* syle_containers[] = {
+	"p",
+	"div",
+	"region",
+	"span",
+	"body",
+	NULL,
+};
+
+// dfxp_can_contain_style returns true if the element might contain style information
+static int
+dfxp_can_contain_style(xmlNode* n, char flag)
+{
+	for (int i = 0; syle_containers[i] != NULL; i++)
+		if (vod_strcmp(n->name, (u_char *) syle_containers[i]) == 0)
+			return 1;
+
+	return 0
 }
 
 // dfxp_add_textflags ORs any decorations flags founds in the xmlNode
 // in the flag bits and returns flag:
-// 	00000001	- bold
-// 	00000010	- italic
-// 	00000100	- underline
 static char
 dfxp_add_textflags(xmlNode* n, char flag)
 { 
@@ -744,7 +765,8 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
 static vod_status_t
 dfxp_get_frame_body(
 	request_context_t* request_context, 
-	xmlNode* cur_node, 
+	xmlNode* cur_node,
+	style *style,
 	vod_str_t* result)
 {
 	size_t alloc_size;
@@ -868,6 +890,8 @@ dfxp_parse_frames(
 	unsigned node_stack_pos = 0;
 	vod_str_t text;
 	vod_status_t rc;
+
+	style style = {0};
 
 	// initialize the result
 	vod_memzero(result, sizeof(*result));
@@ -1039,6 +1063,7 @@ dfxp_parse_frames(
 		rc = dfxp_get_frame_body(
 			request_context,
 			cur_node->children,
+			&style,
 			&text);
 		switch (rc)
 		{
