@@ -540,20 +540,15 @@ dfxp_get_text_content_len(xmlNode* cur_node)
 }
 
 
-static int
-dfxp_has_attr_value(xmlNode* n, char* name, char* value)
-{
-	xmlChar* attr = dfxp_get_xml_prop(n, (u_char *) name);
-	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
-}
-
 
 typedef struct{
 	char* id;
 	char decoration; 	// 1=bold, 2=italic, 4=underline
 	struct align{
-		char display;	// 0=center, 1=before, 2=after
-		char text;		// 0=center, 1=left, 2=right
+		// since these are never ORed, we can just use the
+		// final webvtt string here instead of bitflags.
+		char *display;	// pre-converted webvtt display string
+		char *text;		// pre-converted webvtt text string
 	} align;
 } style;
 
@@ -562,14 +557,63 @@ typedef struct{
 	style style;
 } region;
 
-/** commented out because the makefile complains about unused symbols
 // NOTE:(as) these are very specific to our usecase [for PoC purposes only]
 static style style_defaults[] = {
-	{"defaultSpeaker", 1, {0, 0}},
-	{"block", 0, {0, 0}},
-	{"rollup", 0, {0, 0}},
+	{"defaultSpeaker", 1, {"", ""}},
+	{"block", 0, {"", ""}},
+	{"rollup", 0, {"", ""}},
 	{NULL},
 };
+
+enum decoration_kind {DECO_BOLD, DECO_ITALIC, DECO_UNDERLINE};
+
+static struct{char *name, *attr; char *tag[2];} decoration[] = {
+	[DECO_BOLD] = {"bold", "fontWeight", {"<b>","</b>"}},
+	[DECO_ITALIC] = {"italic", "fontStyle", {"<i>","</i>"}},
+	[DECO_UNDERLINE] = {"underline", "textDecoration", {"<u>","</u>"}},
+	{NULL},
+};
+
+enum textalign_kind {TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
+
+// textalign and displayalign are rulesets on how we convert between
+// dfxp tags to webvtt values.
+static struct{char *name, *attr, *vtt;} textalign[] = {
+	[TA_START] = {"start", "textAlign", "align=start position=15%"},
+	[TA_CENTER]= {"center", "textAlign", "align=middle position=50%"},
+	[TA_END]= {"end", "textAlign", "align=end position=85%"},
+	[TA_LEFT]= {"left", "textAlign", "align=start position=15%"},
+	[TA_RIGHT]= {"right", "textAlign", "align=end position=85%"},
+	{NULL},
+};
+
+enum displayalign_kind {DA_BEFORE, DA_CENTER, DA_AFTER};
+
+static struct{char *name, *attr, *vtt;} displayalign[] = {
+	[DA_BEFORE]= {"before", "displayAlign", "line=10%"},
+	[DA_CENTER]= {"center", "displayAlign", "line=50%"},
+	[DA_AFTER]= {"after", "displayAlign", "line=100%"},
+	{NULL},
+};
+
+// NOTE:(as) these are very specific to our usecase [for PoC purposes only]
+//
+// So in TTML-file can be specified only region ID, without region description.
+// If hard coded region description is defined - default description will be overridden.
+//
+static region region_defaults[] = {
+	{"lowerThird", {"defaultSpeaker", 1, {"line=100%", "align=middle position=50%"}}},	// display=after, text=center
+	{"middleThird", {"defaultSpeaker", 1, {"line=50%", "align=middle position=50%"}}},// display=center, text=center
+	{"upperThird", {"defaultSpeaker", 1, {"line=10%", "align=middle position=50%"}}},// display=before, text=center
+	{NULL},
+};
+
+static int
+dfxp_has_attr_value(xmlNode* n, char* name, char* value)
+{
+	xmlChar* attr = dfxp_get_xml_prop(n, (u_char *) name);
+	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
+}
 
 // dfxp_style_merge merges dst with src, modifying dst
 // and returning it.
@@ -584,36 +628,6 @@ dfxp_style_merge(style* dst, style* src)
 	return dst;
 }
 
-**/
-
-static struct{char *name, *attr; char *tag[2];} decoration[] = {
-	{"bold", "fontWeight", {"<b>","</b>"}},
-	{"italic", "fontStyle", {"<i>","</i>"}},
-	{"underline", "textDecoration", {"<u>","</u>"}},
-	{NULL},
-};
-
-/** works, but note used by code yet, uncomment to use
-
-// textalign and displayalign are rulesets on how we convert between
-// dfxp tags to webvtt values.
-static struct{char *name, *attr, *vtt;} textalign[] = {
-	{"start", "textAlign", "align=start position=15%"},
-	{"left", "textAlign", "align=start position=15%"},
-	{"center", "textAlign", "align=middle position=50%"},
-	{"right", "textAlign", "align=end position=85%"},
-	{"end", "textAlign", "align=end position=85%"},
-	{NULL},
-};
-
-static struct{char *name, *attr, *vtt;} displayalign[] = {
-	{"before", "displayAlign", "align=start position=15%"},
-	{"center", "displayAlign", "align=start position=15%"},
-	{"after", "displayAlign", "align=middle position=50%"},
-	{NULL},
-};
-**/
-
 // dfxp_add_textflags ORs any decorations flags founds in the xmlNode
 // in the flag bits and returns flag:
 // 	00000001	- bold
@@ -623,50 +637,38 @@ static char
 dfxp_add_textflags(xmlNode* n, char flag)
 { 
 	for (int i = 0; decoration[i].name != NULL; i++)
-	{
 		flag |= dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name) << i;
-	}
+
 	return flag;
 }
 
-/** works, but note used by code yet, uncomment to use
 // dfxp_parse_style extracts alignment, display, and decoration
-// attributes and applies it to the style
+// attributes and applies it to the style. Its search method is
+// lazy per category. So the first display alignment, text alignment
+// and decoration will be the one used.
 static style*
 dfxp_parse_style(xmlNode* n, style *s)
 { 
-	for (int i = 0; displayalign[i].name != NULL; i++)
-	{
+	for (int i = 0; displayalign[i].name != NULL; i++) {
 		if (dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name))
-		{
-			// TODO(as): set
 			break;
-		}
 	}
-	for (int i = 0; textalign[i].name != NULL; i++)
-	{
+	for (int i = 0; textalign[i].name != NULL; i++){
 		if (dfxp_has_attr_value(n, textalign[i].attr, textalign[i].name))
-		{
-			// TODO(as): set
 			break;
-		}
 	}
 	s->decoration = dfxp_add_textflags(n, s->decoration);
 	return s;
 }
-**/
 
 // dfxp_append_decoration applies the decorations flag bits to p
 // and returns p
 static u_char* 
 dfxp_append_decoration(u_char* p, char flag, int close)
 {
-	for (int i = 0; decoration[i].name != NULL; i++)
-	{
+	for (int i = 0; decoration[i].name != NULL; i++){
 		if (flag & (1<<i))
-		{
 			p = dfxp_append_string(p, (u_char *) decoration[i].tag[close]);
-		}
 	}
 	return p;
 }
