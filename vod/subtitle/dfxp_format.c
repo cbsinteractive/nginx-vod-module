@@ -567,7 +567,7 @@ dfxp_get_text_content_len(xmlNode* cur_node)
 
 typedef struct{
 	char* id;
-	char decoration; 	// 1=bold, 2=italic, 4=underline
+	char decoration; 
 	struct align{
 		// since these are never ORed, we can just use the
 		// final webvtt string here instead of bitflags.
@@ -581,20 +581,16 @@ typedef struct{
 	style style;
 } region;
 
-// NOTE:(as) these are very specific to our usecase [for PoC purposes only]
-static style style_defaults[] = {
-	{"defaultSpeaker", 1, {"", ""}},
-	{"block", 0, {"", ""}},
-	{"rollup", 0, {"", ""}},
-	{NULL},
-};
-
 enum decoration_kind {DECO_BOLD, DECO_ITALIC, DECO_UNDERLINE};
 
+#define	DECO_SET_BOLD	(1<<DECO_BOLD)
+#define	DECO_SET_ITALIC	(1<<DECO_ITALIC)
+#define	DECO_SET_UNDERLINE	(1<<DECO_UNDERLINE)
+
 static struct{char *name, *attr; char *tag[2];} decoration[] = {
-	[DECO_BOLD] = {"bold", "fontWeight", {"<b>","</b>"}},
-	[DECO_ITALIC] = {"italic", "fontStyle", {"<i>","</i>"}},
-	[DECO_UNDERLINE] = {"underline", "textDecoration", {"<u>","</u>"}},
+	{"bold", "fontWeight", {"<b>","</b>"}},
+	{"italic", "fontStyle", {"<i>","</i>"}},
+	{"underline", "textDecoration", {"<u>","</u>"}},
 	{NULL},
 };
 
@@ -639,6 +635,17 @@ dfxp_has_attr_value(xmlNode* n, char* name, char* value)
 	return (attr != NULL) && vod_strcmp(attr, (u_char *) value) == 0;
 }
 
+/***
+
+// NOTE:(as) these are very specific to our usecase [for PoC purposes only]
+static style style_defaults[] = {
+	{"defaultSpeaker", 1, {"", ""}},
+	{"block", 0, {"", ""}},
+	{"rollup", 0, {"", ""}},
+	{NULL},
+};
+
+
 // dfxp_style_merge merges dst with src, modifying dst
 // and returning it.
 //
@@ -655,6 +662,8 @@ dfxp_style_merge(style* dst, style* src)
 	return dst;
 }
 
+****/
+
 static char* syle_containers[] = {
 	"p",
 	"div",
@@ -666,7 +675,7 @@ static char* syle_containers[] = {
 
 // dfxp_can_contain_style returns true if the element might contain style information
 static int
-dfxp_can_contain_style(xmlNode* n, char flag)
+dfxp_can_contain_style(xmlNode* n)
 {
 	for (int i = 0; syle_containers[i] != NULL; i++)
 		if (vod_strcmp(n->name, (u_char *) syle_containers[i]) == 0)
@@ -690,18 +699,37 @@ dfxp_add_textflags(xmlNode* n, char flag)
 // attributes and applies it to the style. Its search method is
 // lazy per category. So the first display alignment, text alignment
 // and decoration will be the one used.
+//
+// it searches the pre-declared static style tables
 static style*
 dfxp_parse_style(xmlNode* n, style *s)
 { 
-	for (int i = 0; displayalign[i].name != NULL; i++) {
-		if (dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name))
+	for (int i = 0; region_defaults[i].id != NULL; i++) {
+		if (dfxp_has_attr_value(n, "region", region_defaults[i].id)){
+			// TODO(as): clearly, we can check if it has a region attr at all
+			// so we dont have to run this loop over and over again if that
+			// tag doesn't exist
+			
+			// TODO(as) should the parent merge with the region? or just
+			// the level nodes and children?
+			*s = region_defaults[i].style;
 			break;
+		}
+	}
+
+	for (int i = 0; displayalign[i].name != NULL; i++) {
+		if (dfxp_has_attr_value(n, displayalign[i].attr, displayalign[i].name)){
+			s->align.display = displayalign[i].vtt;
+			break;
+		}
 	}
 	for (int i = 0; textalign[i].name != NULL; i++){
-		if (dfxp_has_attr_value(n, textalign[i].attr, textalign[i].name))
+		if (dfxp_has_attr_value(n, textalign[i].attr, textalign[i].name)){
+			s->align.text = textalign[i].vtt;
 			break;
+		}
 	}
-	s->decoration = dfxp_add_textflags(n, s->decoration);
+	s->decoration |= dfxp_add_textflags(n, s->decoration);
 	return s;
 }
 
@@ -717,6 +745,19 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 	return p;
 }
 
+// dfxp_append_style applies the alignments suffix text
+// this should be done after the cue.
+//
+// 00:00:00:000 -> 00:00:00:000 %s
+static u_char* 
+dfxp_append_style(u_char* p, style *s)
+{
+	p = dfxp_append_string(p, (u_char *) s->align.display);
+	*p++ = ' ';
+	p = dfxp_append_string(p, (u_char *) s->align.text);
+	*p++ = ' ';
+	return p;
+}
 
 static u_char* 
 dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
@@ -804,7 +845,7 @@ dfxp_get_frame_body(
 	}
 
 	// NOTE(as): cue trailer: 1/2: make room for things like 'position:15% align:start'
-	alloc_size += sizeof(TMP_TEST_TEXT);
+	alloc_size += sizeof(TMP_TEST_TEXT)*2;
 
 	alloc_size += 3;		// \n * 3
 
@@ -820,7 +861,8 @@ dfxp_get_frame_body(
 	start++;	// save space for prepending space (used to be a newline)
 
 	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
-	end = dfxp_append_string(start, TMP_TEST_TEXT);
+	// end = dfxp_append_string(start, TMP_TEST_TEXT);
+	end = dfxp_append_style(start, style);
 
 	// NOTE(as): this routine looks at text, including spans, at first it seems like it
 	// only needs the decorations, i.e., bold, italics, underlines. The last argument has
@@ -830,7 +872,7 @@ dfxp_get_frame_body(
 	// inherits from. However, since the alignments are defined at the cue level, it appears
 	// we can only support passing in decorations associated with named regions for this
 	// function.
-	end = dfxp_append_text_content(cur_node, end, 0);	
+	end = dfxp_append_text_content(cur_node, end, style->decoration);	
 	if ((size_t)(end - start + 2) > alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -916,12 +958,12 @@ dfxp_parse_frames(
 
 //	struct{xmlNode* n; style s;} style_stack[DFXP_MAX_STACK_DEPTH];
 
-	unsigned style_stack_pos = 0;
+//	unsigned style_stack_pos = 0;
 	style style = {0};
 
 	// NOTE(as): just testing to see if it works, need to make use of style_stack
 	// this is building the equivalent of "defaultSpeaker"
-	style.decoration = DECO_BOLD|DECO_ITALIC|DECO_UNDERLINE;
+	style.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
 	style.align.text = textalign[TA_CENTER].vtt;
 	style.align.display = displayalign[DA_CENTER].vtt;
 
@@ -999,6 +1041,11 @@ dfxp_parse_frames(
 
 		// TODO(as): Check whether this node can have style information associated with
 		// it, if it does merge the style and push it onto the stack
+		if (dfxp_can_contain_style(cur_node))
+		{
+			// TODO(as): needs to idenfity region somehow too
+			dfxp_parse_style(cur_node, &style);
+		}
 
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
