@@ -752,11 +752,24 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 static u_char* 
 dfxp_append_style(u_char* p, style *s)
 {
-	p = dfxp_append_string(p, (u_char *) s->align.display);
-	*p++ = ' ';
-	p = dfxp_append_string(p, (u_char *) s->align.text);
-	*p++ = ' ';
+	if (s->align.display != NULL){
+		*p++ = ' ';
+		p = dfxp_append_string(p, (u_char *) s->align.display);
+	}
+	if (s->align.text != NULL){
+		*p++ = ' ';
+		p = dfxp_append_string(p, (u_char *) s->align.text);
+	}
 	return p;
+}
+
+static int
+dfxp_whitespace(u_char* s)
+{
+	while (*s){
+		if (!isspace(*s++)) return 0;
+	}
+	return 1;
 }
 
 static u_char* 
@@ -778,7 +791,7 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
 			}
 
 			cur_node = node_stack[--node_stack_pos];
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) != 0)
+			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) == 0)
 			{
 				lflag = flag;
 			}
@@ -789,9 +802,13 @@ dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
-			p = dfxp_append_decoration(p, lflag, 0);
-			p = dfxp_append_string(p, cur_node->content);
-			p = dfxp_append_decoration(p, lflag, 1);
+			if (dfxp_whitespace(cur_node->content)){
+				p = dfxp_append_string(p, cur_node->content);
+			} else {
+				p = dfxp_append_decoration(p, lflag, 0);
+				p = dfxp_append_string(p, cur_node->content);
+				p = dfxp_append_decoration(p, lflag, 1);
+			}
 			break;
 
 		case XML_ELEMENT_NODE:
@@ -858,7 +875,7 @@ dfxp_get_frame_body(
 		return VOD_ALLOC_FAILED;
 	}
 
-	start++;	// save space for prepending space (used to be a newline)
+	//start++;	// save space for prepending space (used to be a newline)
 
 	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
 	// end = dfxp_append_string(start, TMP_TEST_TEXT);
@@ -882,39 +899,9 @@ dfxp_get_frame_body(
 	}
 
 	// trim spaces
-	for (;;)
-	{
-		if (start >= end)
-		{
-			return VOD_NOT_FOUND;
-		}
-
-		if (!isspace(start[0]))
-		{
-			break;
-		}
-
-		start++;
-	}
-
-	for (;;)
-	{
-		if (start >= end)
-		{
-			return VOD_NOT_FOUND;
-		}
-
-		if (!isspace(end[-1]))
-		{
-			break;
-		}
-
-		end--;
-	}
-
-	// add leading/trailing newlines
-	start--;
-	*start = ' ';
+//	for (end > start && isspace(end[-1])) {
+//		end--;
+//	}
 	*end++ = '\n';
 	*end++ = '\n';
 
