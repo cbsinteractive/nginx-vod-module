@@ -616,20 +616,20 @@ enum textalign_kind {TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
 // textalign and displayalign are rulesets on how we convert between
 // dfxp tags to webvtt values.
 static struct{char *name, *attr, *vtt;} textalign[] = {
-	[TA_START] = {"start", "textAlign", "align=start position=15%"},
-	[TA_CENTER]= {"center", "textAlign", "align=middle position=50%"},
-	[TA_END]= {"end", "textAlign", "align=end position=85%"},
-	[TA_LEFT]= {"left", "textAlign", "align=start position=15%"},
-	[TA_RIGHT]= {"right", "textAlign", "align=end position=85%"},
+	[TA_START] = {"start", "textAlign", "align:start position:15%"},
+	[TA_CENTER]= {"center", "textAlign", "align:middle position:50%"},
+	[TA_END]= {"end", "textAlign", "align:end position:85% size:100%"},
+	[TA_LEFT]= {"left", "textAlign", "align:start position:15%"},
+	[TA_RIGHT]= {"right", "textAlign", "align:end position:85% size:100%"},
 	{NULL},
 };
 
 enum displayalign_kind {DA_BEFORE, DA_CENTER, DA_AFTER};
 
 static struct{char *name, *attr, *vtt;} displayalign[] = {
-	[DA_BEFORE]= {"before", "displayAlign", "line=10%"},
-	[DA_CENTER]= {"center", "displayAlign", "line=50%"},
-	[DA_AFTER]= {"after", "displayAlign", "line=100%"},
+	[DA_BEFORE]= {"before", "displayAlign", "line:10%"},
+	[DA_CENTER]= {"center", "displayAlign", "line:50%"},
+	[DA_AFTER]= {"after", "displayAlign", "line:100%"},
 	{NULL},
 };
 
