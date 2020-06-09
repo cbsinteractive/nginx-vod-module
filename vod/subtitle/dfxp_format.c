@@ -278,6 +278,84 @@ dfxp_clamp(int64_t v, int64_t lo, int64_t hi)
 	return v;
 }
 
+// TODO(as): possibly slow recursion
+xmlNode*
+dfxp_findFirstNode(xmlNode *node, char *name)
+{
+    while(node != NULL){
+        if(vod_strcmp(node->name, (u_char*) name) == 0){
+            return node; 
+        }
+		if (node->children != NULL) {
+            xmlNode *tmp =  dfxp_findFirstNode(node, name);
+			if (tmp != NULL) return tmp;
+		}
+		node = node->next;
+    }
+    return NULL;
+}
+
+static void
+dfxp_parse_layout_style(xmlDoc *doc)
+{
+	xmlNode* stack[DFXP_MAX_STACK_DEPTH];
+	xmlNode temp_node;
+	unsigned n = 0;
+
+	xmlNode *root = xmlDocGetRootElement(doc);
+
+	/* parse styling */
+	for (xmlNode *node = dfxp_findFirstNode(root, "styling"); ; node = node->prev){
+		if (node == NULL){
+			if (n == 0){
+				break;
+			}
+			node = stack[--n];
+			continue;
+		}
+		if (node->type != XML_ELEMENT_NODE)
+			continue;
+
+		/* parse styling */
+
+		if	((vod_strcmp(node->name, "") == 0)) {	/* replace with recursive condition */
+			if (node->last == NULL || n == DFXP_MAX_STACK_DEPTH)
+				continue;
+
+			stack[n++] = node;
+			temp_node.prev = node->last;
+			node = &temp_node;
+			continue;
+		}
+	}
+
+	/* parse layout */
+	n = 0;
+	for (xmlNode *node = dfxp_findFirstNode(root, "layout"); ; node = node->prev){
+		if (node == NULL){
+			if (n == 0){
+				break;
+			}
+			node = stack[--n];
+			continue;
+		}
+		if (node->type != XML_ELEMENT_NODE)
+			continue;
+
+		/* parse layout */
+
+		if	((vod_strcmp(node->name, "") == 0)) {	/* replace with recursive condition */
+			if (node->last == NULL || n == DFXP_MAX_STACK_DEPTH)
+				continue;
+
+			stack[n++] = node;
+			temp_node.prev = node->last;
+			node = &temp_node;
+			continue;
+		}
+	}
+}
+
 static uint64_t
 dfxp_get_duration(xmlDoc *doc)
 {
