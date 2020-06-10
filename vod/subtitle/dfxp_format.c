@@ -781,69 +781,68 @@ dfxp_whitespace(u_char* s)
 }
 
 static u_char* 
-dfxp_append_text_content(xmlNode* cur_node, u_char* p, char flag)
+dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 {
-	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
-	unsigned node_stack_pos = 0;
+	struct{
+		xmlNode* node;
+		char flag;
+	} stack[DFXP_MAX_STACK_DEPTH];
+	int i = 0;
 
 	char lflag = 0;	// local to <span> tags
 	
 	for (;;)
 	{
 		// traverse the tree dfs order
-		if (cur_node == NULL)
-		{
-			if (node_stack_pos <= 0)
-			{
+		if (node == NULL){
+			if (i == 0)
 				break;
-			}
 
-			cur_node = node_stack[--node_stack_pos];
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) == 0)
-			{
-				lflag = flag;
-			}
+			node = stack[--i].node;
+			lflag = stack[i].flag;
 			continue;
 		}
 
-		switch (cur_node->type)
+		switch (node->type)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
-			if (dfxp_whitespace(cur_node->content)){
-				p = dfxp_append_string(p, cur_node->content);
+			if (dfxp_whitespace(node->content)){
+				p = dfxp_append_string(p, node->content);
 			} else {
 				p = dfxp_append_decoration(p, lflag, 0);
-				p = dfxp_append_string(p, cur_node->content);
+				p = dfxp_append_string(p, node->content);
 				p = dfxp_append_decoration(p, lflag, 1);
 			}
 			break;
 
 		case XML_ELEMENT_NODE:
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_BR) == 0)
+			if (vod_strcmp(node->name, DFXP_ELEMENT_BR) == 0)
 			{
 				*p++ = '\n';
 				break;
 			}
 
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) != 0 ||
-				cur_node->children == NULL ||
-				node_stack_pos >= vod_array_entries(node_stack))
+			if (vod_strcmp(node->name, DFXP_ELEMENT_SPAN) != 0 ||
+				node->children == NULL ||
+				i >= DFXP_MAX_STACK_DEPTH)
 			{
 				break;
 			}
 			
-			lflag = dfxp_add_textflags(cur_node, flag);
 
-			node_stack[node_stack_pos++] = cur_node->next;
-			cur_node = cur_node->children;
+			stack[i].node = node->next;
+			stack[i].flag = lflag;
+			lflag = dfxp_add_textflags(node, flag);
+			i++;
+			node = node->children;
 			continue;
 
 		default:
 			break;
 		}
 
-		cur_node = cur_node->next;
+		node = node->next;
 	}
 
 	return p;
@@ -883,12 +882,9 @@ dfxp_get_frame_body(
 		return VOD_ALLOC_FAILED;
 	}
 
-	//start++;	// save space for prepending space (used to be a newline)
-
 	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
-	// end = dfxp_append_string(start, TMP_TEST_TEXT);
 	end = dfxp_append_style(start, style);
-
+	*end++ = '\n';
 	// NOTE(as): this routine looks at text, including spans, at first it seems like it
 	// only needs the decorations, i.e., bold, italics, underlines. The last argument has
 	// indeed been retrofitted with the flag byte, however, the spans can refer to named
