@@ -522,7 +522,7 @@ dfxp_append_string(u_char* p, u_char* s)
 }
 
 // TODO(as): this needs to be dynamic
-#define DFXP_TEXT_DECORATION_OVERHEAD 64
+#define DFXP_TEXT_DECORATION_OVERHEAD 128
 
 static size_t
 dfxp_get_text_content_len(xmlNode* cur_node)
@@ -581,16 +581,13 @@ dfxp_get_text_content_len(xmlNode* cur_node)
 }
 
 
-
 typedef struct{
 	char* id;
-	char decoration; 
-	struct align{
-		// since these are never ORed, we can just use the
-		// final webvtt string here instead of bitflags.
-		char *display;	// pre-converted webvtt display string
-		char *text;		// pre-converted webvtt text string
-	} align;
+	struct flag{
+		int decoration;
+		int text;
+		int display;
+	} flag;
 } style;
 
 typedef struct{
@@ -599,49 +596,46 @@ typedef struct{
 } region;
 
 enum decoration_kind {DECO_BOLD, DECO_ITALIC, DECO_UNDERLINE};
-
 #define	DECO_SET_BOLD	(1<<DECO_BOLD)
 #define	DECO_SET_ITALIC	(1<<DECO_ITALIC)
 #define	DECO_SET_UNDERLINE	(1<<DECO_UNDERLINE)
 
-static struct{char *name, *attr; char *tag[2];} decoration[] = {
+static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 	{"bold", "fontWeight", {"<b>","</b>"}},
 	{"italic", "fontStyle", {"<i>","</i>"}},
 	{"underline", "textDecoration", {"<u>","</u>"}},
 	{NULL},
 };
 
-enum textalign_kind {TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
-
 // textalign and displayalign are rulesets on how we convert between
 // dfxp tags to webvtt values.
-static struct{char *name, *attr, *vtt;} textalign[] = {
-	[TA_START] = {"start", "textAlign", "align:start position:15%"},
-	[TA_CENTER]= {"center", "textAlign", "align:middle position:50%"},
-	[TA_END]= {"end", "textAlign", "align:end position:85% size:100%"},
-	[TA_LEFT]= {"left", "textAlign", "align:start position:15%"},
-	[TA_RIGHT]= {"right", "textAlign", "align:end position:85% size:100%"},
+enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
+static struct{char *name, *attr, *vtt;} textaligntab[] = {
+	[TA_DEFAULT] = {"", "textAlign", " "},
+	[TA_START] = {"start", "textAlign", " align:start position:15%"},
+	[TA_CENTER]= {"center", "textAlign", " align:middle position:50%"},
+	[TA_END]= {"end", "textAlign", " align:end position:85% size:100%"},
+	[TA_LEFT]= {"left", "textAlign", " align:start position:15%"},
+	[TA_RIGHT]= {"right", "textAlign", " align:end position:85% size:100%"},
 	{NULL},
 };
 
-enum displayalign_kind {DA_BEFORE, DA_CENTER, DA_AFTER};
-
-static struct{char *name, *attr, *vtt;} displayalign[] = {
-	[DA_BEFORE]= {"before", "displayAlign", "line:10%"},
-	[DA_CENTER]= {"center", "displayAlign", "line:50%"},
-	[DA_AFTER]= {"after", "displayAlign", "line:100%"},
+enum displayalign_kind {DA_DEFAULT, DA_BEFORE, DA_CENTER, DA_AFTER};
+static struct{char *name, *attr, *vtt;} displayaligntab[] = {
+	[DA_DEFAULT] = {"", "displayAlign", " "},
+	[DA_BEFORE]= {"before", "displayAlign", " line:10%"},
+	[DA_CENTER]= {"center", "displayAlign", " line:50%"},
+	[DA_AFTER]= {"after", "displayAlign", " line:100%"},
 	{NULL},
 };
 
-// NOTE:(as) these are very specific to our usecase [for PoC purposes only]
-//
-// So in TTML-file can be specified only region ID, without region description.
-// If hard coded region description is defined - default description will be overridden.
-//
+// Each region imports the "defaultSpeaker" style, but that's just bold text. This means the three
+// regions are all bold, center-weighted text, differing only by display alignment. The bold text is
+// technically a property of the hard-coded defaultSpeaker region; we set it in the style for simplicity.
 static region region_defaults[] = {
-	{"lowerThird", {"defaultSpeaker", 1, {"line=100%", "align=middle position=50%"}}},	// display=after, text=center
-	{"middleThird", {"defaultSpeaker", 1, {"line=50%", "align=middle position=50%"}}},// display=center, text=center
-	{"upperThird", {"defaultSpeaker", 1, {"line=10%", "align=middle position=50%"}}},// display=before, text=center
+	{"lowerThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_AFTER}}},	
+	{"middleThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_CENTER}}},
+	{"upperThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_BEFORE}}},
 	{NULL},
 };
 
@@ -656,9 +650,9 @@ dfxp_has_attr_value(xmlNode* n, char* name, char* value)
 
 // NOTE:(as) these are very specific to our usecase [for PoC purposes only]
 static style style_defaults[] = {
-	{"defaultSpeaker", 1, {"", ""}},
-	{"block", 0, {"", ""}},
-	{"rollup", 0, {"", ""}},
+	{"defaultSpeaker", DECO_SET_BOLD, 0, 0},
+	{"block", 0, 0, 0},
+	{"rollup", 0, 0, 0},
 	{NULL},
 };
 
@@ -706,8 +700,8 @@ dfxp_can_contain_style(xmlNode* n)
 static char
 dfxp_add_textflags(xmlNode* n, char flag)
 { 
-	for (int i = 0; decoration[i].name != NULL; i++)
-		flag |= dfxp_has_attr_value(n, decoration[i].attr, decoration[i].name) << i;
+	for (int i = 0; decorationtab[i].name != NULL; i++)
+		flag |= dfxp_has_attr_value(n, decorationtab[i].attr, decorationtab[i].name) << i;
 
 	return flag;
 }
@@ -734,19 +728,19 @@ dfxp_parse_style(xmlNode* n, style *s)
 		}
 	}
 
-	for (int i = 0; displayalign[i].name != NULL; i++) {
-		if (dfxp_has_attr_value(n, displayalign[i].attr, displayalign[i].name)){
-			s->align.display = displayalign[i].vtt;
+	for (int i = 0; textaligntab[i].name != NULL; i++){
+		if (dfxp_has_attr_value(n, textaligntab[i].attr, textaligntab[i].name)){
+			s->flag.text = i;
 			break;
 		}
 	}
-	for (int i = 0; textalign[i].name != NULL; i++){
-		if (dfxp_has_attr_value(n, textalign[i].attr, textalign[i].name)){
-			s->align.text = textalign[i].vtt;
+	for (int i = 0; displayaligntab[i].name != NULL; i++) {
+		if (dfxp_has_attr_value(n, displayaligntab[i].attr, displayaligntab[i].name)){
+			s->flag.display = i;
 			break;
 		}
 	}
-	s->decoration |= dfxp_add_textflags(n, s->decoration);
+	s->flag.decoration |= dfxp_add_textflags(n, s->flag.decoration);
 	return s;
 }
 
@@ -755,9 +749,9 @@ dfxp_parse_style(xmlNode* n, style *s)
 static u_char* 
 dfxp_append_decoration(u_char* p, char flag, int close)
 {
-	for (int i = 0; decoration[i].name != NULL; i++){
+	for (int i = 0; decorationtab[i].name != NULL; i++){
 		if (flag & (1<<i))
-			p = dfxp_append_string(p, (u_char *) decoration[i].tag[close]);
+			p = dfxp_append_string(p, (u_char *) decorationtab[i].tag[close]);
 	}
 	return p;
 }
@@ -769,14 +763,11 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 static u_char* 
 dfxp_append_style(u_char* p, style *s)
 {
-	if (s->align.display != NULL){
-		*p++ = ' ';
-		p = dfxp_append_string(p, (u_char *) s->align.display);
-	}
-	if (s->align.text != NULL){
-		*p++ = ' ';
-		p = dfxp_append_string(p, (u_char *) s->align.text);
-	}
+	if (s->flag.text)
+		p = dfxp_append_string(p, (u_char *) textaligntab[s->flag.text].vtt);
+	if (s->flag.display)
+		p = dfxp_append_string(p, (u_char *) displayaligntab[s->flag.display].vtt);
+
 	return p;
 }
 
@@ -906,7 +897,7 @@ dfxp_get_frame_body(
 	// inherits from. However, since the alignments are defined at the cue level, it appears
 	// we can only support passing in decorations associated with named regions for this
 	// function.
-	end = dfxp_append_text_content(cur_node, end, style->decoration);	
+	end = dfxp_append_text_content(cur_node, end, style->flag.decoration);	
 	if ((size_t)(end - start + 2) > alloc_size)
 	{
 		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
@@ -965,11 +956,10 @@ dfxp_parse_frames(
 //	unsigned style_stack_pos = 0;
 	style style = {0};
 
-	// NOTE(as): just testing to see if it works, need to make use of style_stack
-	// this is building the equivalent of "defaultSpeaker"
-	style.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
-	style.align.text = textalign[TA_CENTER].vtt;
-	style.align.display = displayalign[DA_CENTER].vtt;
+	// NOTE(as): just testing
+	// 	style.flag.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
+	// 	style.flag.text = TA_CENTER;
+	// 	style.flag.display = DA_CENTER;
 
 //	style_stack[0].n = NULL; style_stack[0].s = style
 
