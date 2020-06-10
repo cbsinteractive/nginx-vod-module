@@ -787,7 +787,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 		xmlNode* node;
 		char flag;
 	} stack[DFXP_MAX_STACK_DEPTH];
-	int i = 0;
+	int depth = 0;
 
 	char lflag = 0;	// local to <span> tags
 	
@@ -795,11 +795,11 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 	{
 		// traverse the tree dfs order
 		if (node == NULL){
-			if (i == 0)
+			if (depth == 0)
 				break;
 
-			node = stack[--i].node;
-			lflag = stack[i].flag;
+			node = stack[--depth].node;
+			lflag = stack[depth].flag;
 			continue;
 		}
 
@@ -825,16 +825,16 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 
 			if (vod_strcmp(node->name, DFXP_ELEMENT_SPAN) != 0 ||
 				node->children == NULL ||
-				i >= DFXP_MAX_STACK_DEPTH)
+				depth >= DFXP_MAX_STACK_DEPTH)
 			{
 				break;
 			}
 			
 
-			stack[i].node = node->next;
-			stack[i].flag = lflag;
+			stack[depth].node = node->next;
+			stack[depth].flag = lflag;
 			lflag = dfxp_add_textflags(node, lflag);
-			i++;
+			depth++;
 			node = node->children;
 			continue;
 
@@ -848,57 +848,31 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 	return p;
 }
 
-#define TMP_TEST_TEXT ((u_char*) "position:15% align:start")
+#define DECORATION_SCRATCH_SPACE (128)
 
 static vod_status_t
-dfxp_get_frame_body(
-	request_context_t* request_context, 
-	xmlNode* cur_node,
-	style *style,
-	vod_str_t* result)
+dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str_t* result)
 {
-	size_t alloc_size;
-	u_char* start;
-	u_char* end;
-	
-	// get the buffer length
-	alloc_size = dfxp_get_text_content_len(cur_node);
-	if (alloc_size == 0)
-	{
+	size_t alloc_size = dfxp_get_text_content_len(node);
+	if (alloc_size == 0) {
 		return VOD_NOT_FOUND;
 	}
+	alloc_size += DECORATION_SCRATCH_SPACE;
 
-	// NOTE(as): cue trailer: 1/2: make room for things like 'position:15% align:start'
-	alloc_size += sizeof(TMP_TEST_TEXT)*2;
-
-	alloc_size += 3;		// \n * 3
-
-	// get the text content
-	start = vod_alloc(request_context->pool, alloc_size);
-	if (start == NULL)
-	{
-		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
-			"dfxp_get_frame_body: vod_alloc failed");
+	u_char* start = vod_alloc(ctx->pool, alloc_size);
+	if (start == NULL){
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, ctx->log, 0,"dfxp_get_frame_body: vod_alloc failed");
 		return VOD_ALLOC_FAILED;
 	}
 
-	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
-	end = dfxp_append_style(start, style);
-//	*end++ = '\n';
-	// NOTE(as): this routine looks at text, including spans, at first it seems like it
-	// only needs the decorations, i.e., bold, italics, underlines. The last argument has
-	// indeed been retrofitted with the flag byte, however, the spans can refer to named
-	// regions, which have styles defined inside of them. This means this function below
-	// will also need to take a list or array of regions to determine which ones the span
-	// inherits from. However, since the alignments are defined at the cue level, it appears
-	// we can only support passing in decorations associated with named regions for this
-	// function.
-	end = dfxp_append_text_content(cur_node, end, style->flag.decoration);	
-	if ((size_t)(end - start + 2) > alloc_size)
-	{
-		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-			"dfxp_get_frame_body: result length %uz exceeded allocated length %uz",
-			(size_t)(end - start + 2), alloc_size);
+	u_char* end = dfxp_append_style(start, style);
+	*end++ = '\n';
+	end = dfxp_append_text_content(node, end, style->flag.decoration);
+	*end++ = '\n';
+	*end++ = '\n';
+
+	if ((size_t)(end - start) > alloc_size) {
+		vod_log_error(VOD_LOG_ERR, ctx->log, 0,"dfxp_get_frame_body: result length %uz exceeded allocated length %uz",(size_t)(end - start + 2), alloc_size);
 		return VOD_UNEXPECTED;
 	}
 
@@ -906,8 +880,6 @@ dfxp_get_frame_body(
 //	for (end > start && isspace(end[-1])) {
 //		end--;
 //	}
-	*end++ = '\n';
-	*end++ = '\n';
 
 	result->data = start;
 	result->len = end - start;
@@ -939,25 +911,25 @@ dfxp_parse_frames(
 
 	dfxp_timestamp_t t = {0};
 
-	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
+	
 	xmlNode* cur_node;
 	xmlNode* last_div = NULL;
 	xmlNode temp_node;
-	unsigned node_stack_pos = 0;
 	vod_str_t text;
 	vod_status_t rc;
 
-//	struct{xmlNode* n; style s;} style_stack[DFXP_MAX_STACK_DEPTH];
-
-//	unsigned style_stack_pos = 0;
-	style style = {0};
+	struct{
+		xmlNode* node;
+		style style;
+	} stack[DFXP_MAX_STACK_DEPTH];
+	int depth = 0;
 
 	// NOTE(as): just testing
+	style style = {0};
 	// 	style.flag.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
 	// 	style.flag.text = TA_CENTER;
 	// 	style.flag.display = DA_CENTER;
 
-//	style_stack[0].n = NULL; style_stack[0].s = style
 
 	// initialize the result
 	vod_memzero(result, sizeof(*result));
@@ -1003,7 +975,7 @@ dfxp_parse_frames(
 		// traverse the tree dfs order
 		if (cur_node == NULL)
 		{
-			if (node_stack_pos <= 0)
+			if (depth == 0)
 			{
 				if (cur_frame != NULL)
 				{
@@ -1013,7 +985,7 @@ dfxp_parse_frames(
 				break;
 			}
 
-			cur_node = node_stack[--node_stack_pos];
+			cur_node = stack[--depth].node;
 			if (cur_node == last_div)
 			{
 				last_div = NULL;
@@ -1039,7 +1011,7 @@ dfxp_parse_frames(
 
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
-			if (cur_node->children == NULL || node_stack_pos >= vod_array_entries(node_stack))
+			if (cur_node->children == NULL || depth >= DFXP_MAX_STACK_DEPTH)
 			{
 				continue;
 			}
@@ -1050,7 +1022,7 @@ dfxp_parse_frames(
 				last_div = cur_node;
 			}
 
-			node_stack[node_stack_pos++] = cur_node;
+			stack[depth++].node = cur_node;
 			temp_node.next = cur_node->children;
 			cur_node = &temp_node;
 			continue;
