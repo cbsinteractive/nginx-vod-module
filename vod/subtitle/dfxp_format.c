@@ -715,6 +715,7 @@ dfxp_add_textflags(xmlNode* n, char flag)
 static style*
 dfxp_parse_style(xmlNode* n, style *s)
 { 
+dprintf(4, "dfxp_parse_style with current value: text(%d) display(%d) deco(%d)\n", s->flag.text, s->flag.display, s->flag.decoration);
 	for (int i = 0; region_defaults[i].id != NULL; i++) {
 		if (dfxp_has_attr_value(n, "region", region_defaults[i].id)){
 			// TODO(as): clearly, we can check if it has a region attr at all
@@ -730,6 +731,7 @@ dfxp_parse_style(xmlNode* n, style *s)
 
 	for (int i = 0; textaligntab[i].name != NULL; i++){
 		if (dfxp_has_attr_value(n, textaligntab[i].attr, textaligntab[i].name)){
+dprintf(4, "set flag.text: %d\n", s->flag.text);
 			s->flag.text = i;
 			break;
 		}
@@ -737,6 +739,7 @@ dfxp_parse_style(xmlNode* n, style *s)
 	for (int i = 0; displayaligntab[i].name != NULL; i++) {
 		if (dfxp_has_attr_value(n, displayaligntab[i].attr, displayaligntab[i].name)){
 			s->flag.display = i;
+dprintf(4, "set flag.display: %d\n", s->flag.display);
 			break;
 		}
 	}
@@ -763,11 +766,12 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 static u_char* 
 dfxp_append_style(u_char* p, style *s)
 {
+dprintf(4,"dfxp_append_style text=%d display=%d\n", s->flag.text, s->flag.display);
 	if (s->flag.text)
 		p = dfxp_append_string(p, (u_char *) textaligntab[s->flag.text].vtt);
 	if (s->flag.display)
 		p = dfxp_append_string(p, (u_char *) displayaligntab[s->flag.display].vtt);
-
+dprintf(4,"edfxp_append_style\n");
 	return p;
 }
 
@@ -866,8 +870,13 @@ dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str
 	}
 
 	u_char* end = dfxp_append_style(start, style);
-	*end++ = '\n';
+
+	*end++ = ' ';
+	u_char* textstart = end;
 	end = dfxp_append_text_content(node, end, style->flag.decoration);
+	if (textstart[0] != '\n') {
+		textstart[-1] = '\n';
+	}
 	*end++ = '\n';
 	*end++ = '\n';
 
@@ -921,11 +930,11 @@ dfxp_parse_frames(
 	struct{
 		xmlNode* node;
 		style style;
-	} stack[DFXP_MAX_STACK_DEPTH];
+	} stack[DFXP_MAX_STACK_DEPTH] = { 0 };
 	int depth = 0;
 
-	// NOTE(as): just testing
 	style style = {0};
+	// NOTE(as): just testing
 	// 	style.flag.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
 	// 	style.flag.text = TA_CENTER;
 	// 	style.flag.display = DA_CENTER;
@@ -985,7 +994,10 @@ dfxp_parse_frames(
 				break;
 			}
 
-			cur_node = stack[--depth].node;
+			depth--;
+			cur_node = stack[depth].node;
+			style = stack[depth].style;
+			
 			if (cur_node == last_div)
 			{
 				last_div = NULL;
@@ -1002,6 +1014,10 @@ dfxp_parse_frames(
 		}
 
 		// TODO(as): Check whether this node can have style information associated with
+		if (depth > 0 && depth < DFXP_MAX_STACK_DEPTH){
+			style = stack[depth].style;
+		}
+
 		// it, if it does merge the style and push it onto the stack
 		if (dfxp_can_contain_style(cur_node))
 		{
@@ -1022,7 +1038,9 @@ dfxp_parse_frames(
 				last_div = cur_node;
 			}
 
-			stack[depth++].node = cur_node;
+			stack[depth].style = style;
+			stack[depth].node = cur_node;
+			depth++;
 			temp_node.next = cur_node->children;
 			cur_node = &temp_node;
 			continue;
@@ -1056,13 +1074,14 @@ dfxp_parse_frames(
 		// TODO(as): consolidate the style variable with the style stack
 		// and pass it into dfxp_get_frame_body
 		//
-
+dprintf(4,"dfxp_get_frame_body\n");
 		// get the text
 		rc = dfxp_get_frame_body(
 			request_context,
 			cur_node->children,
 			&style,
 			&text);
+dprintf(4,"edfxp_get_frame_body\n");
 		switch (rc)
 		{
 		case VOD_NOT_FOUND:
