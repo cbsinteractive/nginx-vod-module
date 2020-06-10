@@ -833,7 +833,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 
 			stack[i].node = node->next;
 			stack[i].flag = lflag;
-			lflag = dfxp_add_textflags(node, flag);
+			lflag = dfxp_add_textflags(node, lflag);
 			i++;
 			node = node->children;
 			continue;
@@ -884,7 +884,7 @@ dfxp_get_frame_body(
 
 	// NOTE(as): cue trailer: 2/2: append things like 'position:15% align:start'
 	end = dfxp_append_style(start, style);
-	*end++ = '\n';
+//	*end++ = '\n';
 	// NOTE(as): this routine looks at text, including spans, at first it seems like it
 	// only needs the decorations, i.e., bold, italics, underlines. The last argument has
 	// indeed been retrofitted with the flag byte, however, the spans can refer to named
