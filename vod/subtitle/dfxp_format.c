@@ -775,26 +775,18 @@ dprintf(4,"edfxp_append_style\n");
 	return p;
 }
 
-static int
-dfxp_whitespace(u_char* s)
-{
-	while (*s){
-		if (!isspace(*s++)) return 0;
-	}
-	return 1;
-}
-
 static u_char* 
 dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 {
 	struct{
 		xmlNode* node;
 		char flag;
-	} stack[DFXP_MAX_STACK_DEPTH];
+	} stack[DFXP_MAX_STACK_DEPTH] = {0};
 	int depth = 0;
 
 	char lflag = 0;	// local to <span> tags
-	
+	char delta = 0;	// difference between parent and child decorations
+
 	for (;;)
 	{
 		// traverse the tree dfs order
@@ -803,7 +795,11 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 				break;
 
 			node = stack[--depth].node;
+
+			delta = (lflag ^ stack[depth].flag) & lflag;
 			lflag = stack[depth].flag;
+			p = dfxp_append_decoration(p, delta, 1);
+
 			continue;
 		}
 
@@ -811,13 +807,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
-			if (dfxp_whitespace(node->content)){
-				p = dfxp_append_string(p, node->content);
-			} else {
-				p = dfxp_append_decoration(p, lflag, 0);
-				p = dfxp_append_string(p, node->content);
-				p = dfxp_append_decoration(p, lflag, 1);
-			}
+			p = dfxp_append_string(p, node->content);
 			break;
 
 		case XML_ELEMENT_NODE:
@@ -837,7 +827,11 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 
 			stack[depth].node = node->next;
 			stack[depth].flag = lflag;
-			lflag = dfxp_add_textflags(node, lflag);
+
+			lflag = dfxp_add_textflags(node, flag);
+			delta = (lflag ^ stack[depth].flag) & lflag;
+			p = dfxp_append_decoration(p, delta, 0);
+
 			depth++;
 			node = node->children;
 			continue;
