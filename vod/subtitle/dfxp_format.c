@@ -715,7 +715,6 @@ dfxp_add_textflags(xmlNode* n, char flag)
 static style*
 dfxp_parse_style(xmlNode* n, style *s)
 { 
-dprintf(4, "dfxp_parse_style with current value: text(%d) display(%d) deco(%d)\n", s->flag.text, s->flag.display, s->flag.decoration);
 	for (int i = 0; region_defaults[i].id != NULL; i++) {
 		if (dfxp_has_attr_value(n, "region", region_defaults[i].id)){
 			// TODO(as): clearly, we can check if it has a region attr at all
@@ -731,7 +730,6 @@ dprintf(4, "dfxp_parse_style with current value: text(%d) display(%d) deco(%d)\n
 
 	for (int i = 0; textaligntab[i].name != NULL; i++){
 		if (dfxp_has_attr_value(n, textaligntab[i].attr, textaligntab[i].name)){
-dprintf(4, "set flag.text: %d\n", s->flag.text);
 			s->flag.text = i;
 			break;
 		}
@@ -739,7 +737,6 @@ dprintf(4, "set flag.text: %d\n", s->flag.text);
 	for (int i = 0; displayaligntab[i].name != NULL; i++) {
 		if (dfxp_has_attr_value(n, displayaligntab[i].attr, displayaligntab[i].name)){
 			s->flag.display = i;
-dprintf(4, "set flag.display: %d\n", s->flag.display);
 			break;
 		}
 	}
@@ -766,12 +763,10 @@ dfxp_append_decoration(u_char* p, char flag, int close)
 static u_char* 
 dfxp_append_style(u_char* p, style *s)
 {
-dprintf(4,"dfxp_append_style text=%d display=%d\n", s->flag.text, s->flag.display);
 	if (s->flag.text)
 		p = dfxp_append_string(p, (u_char *) textaligntab[s->flag.text].vtt);
 	if (s->flag.display)
 		p = dfxp_append_string(p, (u_char *) displayaligntab[s->flag.display].vtt);
-dprintf(4,"edfxp_append_style\n");
 	return p;
 }
 
@@ -1068,14 +1063,12 @@ dfxp_parse_frames(
 		// TODO(as): consolidate the style variable with the style stack
 		// and pass it into dfxp_get_frame_body
 		//
-dprintf(4,"dfxp_get_frame_body\n");
 		// get the text
 		rc = dfxp_get_frame_body(
 			request_context,
 			cur_node->children,
 			&style,
 			&text);
-dprintf(4,"edfxp_get_frame_body\n");
 		switch (rc)
 		{
 		case VOD_NOT_FOUND:
