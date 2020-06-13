@@ -278,23 +278,6 @@ dfxp_clamp(int64_t v, int64_t lo, int64_t hi)
 	return v;
 }
 
-// TODO(as): possibly slow recursion
-xmlNode*
-dfxp_findFirstNode(xmlNode *node, char *name)
-{
-    while(node != NULL){
-        if(vod_strcmp(node->name, (u_char*) name) == 0){
-            return node; 
-        }
-		if (node->children != NULL) {
-            xmlNode *tmp =  dfxp_findFirstNode(node, name);
-			if (tmp != NULL) return tmp;
-		}
-		node = node->next;
-    }
-    return NULL;
-}
-
 static uint64_t
 dfxp_get_duration(xmlDoc *doc)
 {
@@ -521,65 +504,14 @@ dfxp_append_string(u_char* p, u_char* s)
 	return p;
 }
 
-// TODO(as): this needs to be dynamic
-#define DFXP_TEXT_DECORATION_OVERHEAD 128
-
-static size_t
-dfxp_get_text_content_len(xmlNode* cur_node)
+static u_char* 
+dfxp_fake_append_string(u_char* p, u_char* s)
 {
-	xmlNode* node_stack[DFXP_MAX_STACK_DEPTH];
-	unsigned node_stack_pos = 0;
-	size_t result = 0;
-
-	for (;;)
-	{
-		// traverse the tree dfs order
-		if (cur_node == NULL)
-		{
-			if (node_stack_pos <= 0)
-			{
-				break;
-			}
-
-			cur_node = node_stack[--node_stack_pos];
-			continue;
-		}
-
-		switch (cur_node->type)
-		{
-		case XML_TEXT_NODE:
-		case XML_CDATA_SECTION_NODE:
-			result += vod_strlen(cur_node->content);
-			break;
-
-		case XML_ELEMENT_NODE:
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_BR) == 0)
-			{
-				result++;		// \n
-				break;
-			}
-
-			if (vod_strcmp(cur_node->name, DFXP_ELEMENT_SPAN) != 0 ||
-				cur_node->children == NULL ||
-				node_stack_pos >= vod_array_entries(node_stack))
-			{
-				break;
-			}
-
-			node_stack[node_stack_pos++] = cur_node->next;
-			cur_node = cur_node->children;
-			continue;
-
-		default:
-			break;
-		}
-
-		cur_node = cur_node->next;
-	}
-
-	return result + DFXP_TEXT_DECORATION_OVERHEAD;
+	return p + vod_strlen(s);
 }
 
+// TODO(as): this needs to be dynamic
+#define DFXP_TEXT_DECORATION_OVERHEAD 128
 
 typedef struct{
 	char* id;
@@ -601,8 +533,8 @@ enum decoration_kind {DECO_BOLD, DECO_ITALIC, DECO_UNDERLINE};
 #define	DECO_SET_UNDERLINE	(1<<DECO_UNDERLINE)
 
 static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
-	{"bold", "fontWeight", {"<b>","</b>"}},
-	{"italic", "fontStyle", {"<i>","</i>"}},
+	{"bold",      "fontWeight",     {"<b>","</b>"}},
+	{"italic",    "fontStyle",      {"<i>","</i>"}},
 	{"underline", "textDecoration", {"<u>","</u>"}},
 	{NULL},
 };
@@ -612,11 +544,11 @@ static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
 static struct{char *name, *attr, *vtt;} textaligntab[] = {
 	[TA_DEFAULT] = {"", "textAlign", " "},
-	[TA_START] = {"start", "textAlign", " align:start position:15%"},
-	[TA_CENTER]= {"center", "textAlign", " align:middle position:50%"},
-	[TA_END]= {"end", "textAlign", " align:end position:85% size:100%"},
-	[TA_LEFT]= {"left", "textAlign", " align:start position:15%"},
-	[TA_RIGHT]= {"right", "textAlign", " align:end position:85% size:100%"},
+	[TA_START]   = {"start", "textAlign", " align:start position:15%"},
+	[TA_CENTER]  = {"center", "textAlign", " align:middle position:50%"},
+	[TA_END]     = {"end", "textAlign", " align:end position:85% size:100%"},
+	[TA_LEFT]    = {"left", "textAlign", " align:start position:15%"},
+	[TA_RIGHT]   = {"right", "textAlign", " align:end position:85% size:100%"},
 	{NULL},
 };
 
@@ -633,9 +565,9 @@ static struct{char *name, *attr, *vtt;} displayaligntab[] = {
 // regions are all bold, center-weighted text, differing only by display alignment. The bold text is
 // technically a property of the hard-coded defaultSpeaker region; we set it in the style for simplicity.
 static region region_defaults[] = {
-	{"lowerThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_AFTER}}},	
+	{"lowerThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_AFTER}}},	
 	{"middleThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_CENTER}}},
-	{"upperThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_BEFORE}}},
+	{"upperThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_BEFORE}}},
 	{NULL},
 };
 
@@ -734,26 +666,42 @@ dfxp_parse_style(xmlNode* n, style *s)
 			break;
 		}
 	}
+
 	for (int i = 0; displayaligntab[i].name != NULL; i++) {
 		if (dfxp_has_attr_value(n, displayaligntab[i].attr, displayaligntab[i].name)){
 			s->flag.display = i;
 			break;
 		}
 	}
+
 	s->flag.decoration |= dfxp_add_textflags(n, s->flag.decoration);
+
 	return s;
 }
 
-// dfxp_append_decoration applies the decorations flag bits to p
-// and returns p
+// dfxp_append_tag applies the HTML-like text decoration
+// tag to p, according to the difference between the flag bits
+// and the parent flag bits, and returns p. 
+//
+// If close is non-zero, close tags (i.e., </b>) are applied instead
+// of open tags.
+//
 static u_char* 
-dfxp_append_decoration(u_char* p, char flag, int close)
+dfxp_append_tag(u_char* p, char flag, char parentflag, int close, u_char* appendfunc (u_char*, u_char*))
 {
+	// NOTE(as): we only want to append an open or close tag here
+	// if the child has something the parent doesn't. This ensures
+	// we don't have redundant tags across nodes and their ancestors.
+	flag &= (flag ^ parentflag);
+
+	if (flag == 0){
+		return p;
+	}
+
 	for (int i = 0; decorationtab[i].name != NULL; i++){
 		if (flag & (1<<i))
-			p = dfxp_append_string(p, (u_char *) decorationtab[i].tag[close]);
+			p = appendfunc(p, (u_char *) decorationtab[i].tag[close]);
 	}
-	return p;
 }
 
 // dfxp_append_style applies the alignments suffix text
@@ -771,7 +719,7 @@ dfxp_append_style(u_char* p, style *s)
 }
 
 static u_char* 
-dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
+dfxp_append_text_content(xmlNode* node, u_char* p, char flag, u_char* appendfunc (u_char*, u_char*))
 {
 	struct{
 		xmlNode* node;
@@ -780,7 +728,6 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 	int depth = 0;
 
 	char lflag = 0;	// local to <span> tags
-	char delta = 0;	// difference between parent and child decorations
 
 	for (;;)
 	{
@@ -791,9 +738,8 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 
 			node = stack[--depth].node;
 
-			delta = (lflag ^ stack[depth].flag) & lflag;
+			p = dfxp_append_tag(p, lflag, stack[depth].flag, 1, appendfunc);  /* close tag */
 			lflag = stack[depth].flag;
-			p = dfxp_append_decoration(p, delta, 1);
 
 			continue;
 		}
@@ -802,13 +748,12 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 		{
 		case XML_TEXT_NODE:
 		case XML_CDATA_SECTION_NODE:
-			p = dfxp_append_string(p, node->content);
+			p = appendfunc(p, node->content);
 			break;
-
 		case XML_ELEMENT_NODE:
 			if (vod_strcmp(node->name, DFXP_ELEMENT_BR) == 0)
 			{
-				*p++ = '\n';
+				p = appendfunc(p, (u_char*) "\n");
 				break;
 			}
 
@@ -824,8 +769,8 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 			stack[depth].flag = lflag;
 
 			lflag = dfxp_add_textflags(node, flag);
-			delta = (lflag ^ stack[depth].flag) & lflag;
-			p = dfxp_append_decoration(p, delta, 0);
+
+			p = dfxp_append_tag(p, lflag, stack[depth].flag, 0, appendfunc);  /* open tag */
 
 			depth++;
 			node = node->children;
@@ -846,7 +791,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag)
 static vod_status_t
 dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str_t* result)
 {
-	size_t alloc_size = dfxp_get_text_content_len(node);
+	size_t alloc_size = (long unsigned int) dfxp_append_text_content(node, 0, style->flag.decoration, dfxp_fake_append_string);
 	if (alloc_size == 0) {
 		return VOD_NOT_FOUND;
 	}
@@ -862,7 +807,7 @@ dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str
 
 	*end++ = ' ';
 	u_char* textstart = end;
-	end = dfxp_append_text_content(node, end, style->flag.decoration);
+	end = dfxp_append_text_content(node, end, style->flag.decoration, dfxp_append_string);
 	if (textstart[0] != '\n') {
 		textstart[-1] = '\n';
 	}
