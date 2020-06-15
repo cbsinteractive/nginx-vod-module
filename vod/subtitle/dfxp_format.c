@@ -965,21 +965,19 @@ dfxp_parse_frames(
 			continue;
 		}
 
-		// TODO(as): Check whether this node can have style information associated with
-		if (depth > 0 && depth < DFXP_MAX_STACK_DEPTH){
-			style = stack[depth].style;
+		// start with the parent node's style information, then parse
+		// additional data from the current node if possible
+		if (depth > 0){
+			style = stack[depth-1].style;
 		}
-
-		// it, if it does merge the style and push it onto the stack
 		if (dfxp_can_contain_style(cur_node))
 		{
-			// TODO(as): needs to idenfity region somehow too
 			dfxp_parse_style(cur_node, &style);
 		}
 
 		if (vod_strcmp(cur_node->name, DFXP_ELEMENT_P) != 0)
 		{
-			if (cur_node->children == NULL || depth >= DFXP_MAX_STACK_DEPTH)
+			if (cur_node->children == NULL || depth == DFXP_MAX_STACK_DEPTH)
 			{
 				continue;
 			}
