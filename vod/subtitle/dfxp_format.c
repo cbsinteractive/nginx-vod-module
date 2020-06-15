@@ -564,7 +564,7 @@ static struct{char *name, *attr, *vtt;} displayaligntab[] = {
 // Each region imports the "defaultSpeaker" style, but that's just bold text. This means the three
 // regions are all bold, center-weighted text, differing only by display alignment. The bold text is
 // technically a property of the hard-coded defaultSpeaker region; we set it in the style for simplicity.
-static region region_defaults[] = {
+static region regiontab[] = {
 	{"lowerThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_AFTER}}},	
 	{"middleThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_CENTER}}},
 	{"upperThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_BEFORE}}},
@@ -647,15 +647,15 @@ dfxp_add_textflags(xmlNode* n, char flag)
 static style*
 dfxp_parse_style(xmlNode* n, style *s)
 { 
-	for (int i = 0; region_defaults[i].id != NULL; i++) {
-		if (dfxp_has_attr_value(n, "region", region_defaults[i].id)){
+	for (int i = 0; regiontab[i].id != NULL; i++) {
+		if (dfxp_has_attr_value(n, "region", regiontab[i].id)){
 			// TODO(as): clearly, we can check if it has a region attr at all
 			// so we dont have to run this loop over and over again if that
 			// tag doesn't exist
 			
 			// TODO(as) should the parent merge with the region? or just
 			// the level nodes and children?
-			*s = region_defaults[i].style;
+			*s = regiontab[i].style;
 			break;
 		}
 	}
@@ -694,14 +694,32 @@ dfxp_append_tag(u_char* p, char flag, char parentflag, int close, u_char* append
 	// we don't have redundant tags across nodes and their ancestors.
 	flag &= (flag ^ parentflag);
 
-	if (flag == 0){
+	if (flag == 0)
+	{
 		return p;
 	}
 
-	for (int i = 0; decorationtab[i].name != NULL; i++){
-		if (flag & (1<<i))
-			p = appendfunc(p, (u_char *) decorationtab[i].tag[close]);
+	if (close == 0)
+	{
+		for (int i = 0; decorationtab[i].name != NULL; i++)
+		{
+			if (flag & (1<<i))
+			{
+				p = appendfunc(p, (u_char *) decorationtab[i].tag[0]);
+			}
+		}
+		return p;
 	}
+
+	// traverse it in reverse order so they look <b><i>like this</i></b>
+	for (int i = vod_array_entries(decorationtab) - 1; i >= 0; i--)
+	{
+		if (flag & (1<<i))
+		{
+			p = appendfunc(p, (u_char *) decorationtab[i].tag[1]);
+		}
+	}
+	return p;
 }
 
 // dfxp_append_style applies the alignments suffix text
@@ -791,7 +809,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag, u_char* appendfunc
 static vod_status_t
 dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str_t* result)
 {
-	size_t alloc_size = (long unsigned int) dfxp_append_text_content(node, 0, style->flag.decoration, dfxp_fake_append_string);
+	size_t alloc_size = (size_t) dfxp_append_text_content(node, 0, style->flag.decoration, dfxp_fake_append_string);
 	if (alloc_size == 0) {
 		return VOD_NOT_FOUND;
 	}
@@ -1004,16 +1022,8 @@ dfxp_parse_frames(
 		t.start_time = dfxp_clamp(t.start_time - base_time, 0, clip_to);
 		t.end_time = dfxp_clamp(t.end_time - base_time, 0, clip_to);
 
-		//
-		// TODO(as): consolidate the style variable with the style stack
-		// and pass it into dfxp_get_frame_body
-		//
-		// get the text
-		rc = dfxp_get_frame_body(
-			request_context,
-			cur_node->children,
-			&style,
-			&text);
+		rc = dfxp_get_frame_body(request_context, cur_node->children, &style, &text);
+
 		switch (rc)
 		{
 		case VOD_NOT_FOUND:
