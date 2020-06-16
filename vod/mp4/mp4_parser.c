@@ -1954,7 +1954,7 @@ static vod_status_t
 mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
-	
+
 	switch (atom_info->name)
 	{
 	case ATOM_NAME_SINF:
@@ -1962,6 +1962,12 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
+		break;
+	case ATOM_NAME_DVCC:
+		context->media_info.dovi_data.len = atom_info->size;
+		context->media_info.dovi_data.data = (u_char*)atom_info->ptr;
+		return VOD_OK;
+
 	case ATOM_NAME_VPCC:
 	case ATOM_NAME_AV1C:
 		break;			// handled outside the switch
@@ -1969,7 +1975,7 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 	default:
 		return VOD_OK;
 	}
-	
+
 	context->media_info.extra_data.len = atom_info->size;
 	context->media_info.extra_data.data = (u_char*)atom_info->ptr;
 	
