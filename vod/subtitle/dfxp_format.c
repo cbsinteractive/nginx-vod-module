@@ -544,11 +544,11 @@ static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
 static struct{char *name, *attr, *vtt;} textaligntab[] = {
 	[TA_DEFAULT] = {"", "textAlign", " "},
-	[TA_START]   = {"start", "textAlign", " align:start position:15%"},
-	[TA_CENTER]  = {"center", "textAlign", " align:middle position:50%"},
-	[TA_END]     = {"end", "textAlign", " align:end position:85% size:100%"},
-	[TA_LEFT]    = {"left", "textAlign", " align:start position:15%"},
-	[TA_RIGHT]   = {"right", "textAlign", " align:end position:85% size:100%"},
+	[TA_START]   = {"start", "textAlign",  " position:15% align:start "},
+	[TA_CENTER]  = {"center", "textAlign", " position:50% align:middle"},
+	[TA_END]     = {"end", "textAlign",    " size:100% position:85% align:end"},
+	[TA_LEFT]    = {"left", "textAlign",   " position:15% align:start"},
+	[TA_RIGHT]   = {"right", "textAlign",  " size:100% position:85% align:end"},
 	{NULL},
 };
 
