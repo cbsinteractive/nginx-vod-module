@@ -510,9 +510,6 @@ dfxp_fake_append_string(u_char* p, u_char* s)
 	return p + vod_strlen(s);
 }
 
-// TODO(as): this needs to be dynamic
-#define DFXP_TEXT_DECORATION_OVERHEAD 128
-
 typedef struct{
 	char* id;
 	struct flag{
@@ -886,10 +883,6 @@ dfxp_parse_frames(
 	int depth = 0;
 
 	style style = {0};
-	// NOTE(as): just testing
-	// 	style.flag.decoration = DECO_SET_BOLD|DECO_SET_ITALIC|DECO_SET_UNDERLINE;
-	// 	style.flag.text = TA_CENTER;
-	// 	style.flag.display = DA_CENTER;
 
 
 	// initialize the result
