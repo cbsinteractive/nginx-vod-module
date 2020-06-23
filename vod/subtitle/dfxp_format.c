@@ -801,7 +801,7 @@ dfxp_append_text_content(xmlNode* node, u_char* p, char flag, u_char* appendfunc
 	return p;
 }
 
-#define DECORATION_SCRATCH_SPACE (128)
+#define DECORATION_SCRATCH_SPACE (64)
 
 static vod_status_t
 dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str_t* result)
@@ -823,9 +823,14 @@ dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str
 	*end++ = ' ';
 	u_char* textstart = end;
 	end = dfxp_append_text_content(node, end, style->flag.decoration, dfxp_append_string);
-	if (textstart[0] != '\n') {
-		textstart[-1] = '\n';
+
+	// After inserting the cue, seek to the end of the whitespace, converting the path of whitespace
+	// to space characters, and overwrite the last one with a newline.
+	while (textstart < end && isspace(*textstart)) {
+		*textstart++ = ' ';
 	}
+	textstart[-1] = '\n';
+
 	*end++ = '\n';
 	*end++ = '\n';
 
@@ -833,11 +838,6 @@ dfxp_get_frame_body(request_context_t* ctx, xmlNode* node, style *style, vod_str
 		vod_log_error(VOD_LOG_ERR, ctx->log, 0,"dfxp_get_frame_body: result length %uz exceeded allocated length %uz",(size_t)(end - start + 2), alloc_size);
 		return VOD_UNEXPECTED;
 	}
-
-	// trim spaces
-//	for (end > start && isspace(end[-1])) {
-//		end--;
-//	}
 
 	result->data = start;
 	result->len = end - start;
