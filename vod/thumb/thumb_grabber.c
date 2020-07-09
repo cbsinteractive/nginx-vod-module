@@ -173,7 +173,7 @@ thumb_grabber_init_encoder(
 	encoder->height = height;
 	encoder->time_base = (AVRational){ 1, 1 };
 	encoder->pix_fmt = AV_PIX_FMT_YUVJ420P;
-	encoder->qmin = encoder->qmax = 0;
+	encoder->qmin = encoder->qmax = 1;
 
 	avrc = avcodec_open2(encoder, encoder_codec, NULL);
 	if (avrc < 0)
