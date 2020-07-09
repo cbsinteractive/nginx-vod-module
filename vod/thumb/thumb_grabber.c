@@ -173,6 +173,7 @@ thumb_grabber_init_encoder(
 	encoder->height = height;
 	encoder->time_base = (AVRational){ 1, 1 };
 	encoder->pix_fmt = AV_PIX_FMT_YUVJ420P;
+	encoder->qmin = encoder->qmax = 10;
 
 	avrc = avcodec_open2(encoder, encoder_codec, NULL);
 	if (avrc < 0)
@@ -583,7 +584,7 @@ thumb_grabber_resize_frame(thumb_grabber_state_t* state)
 	sws_ctx = sws_getContext(
 		input_frame->width, input_frame->height, input_frame->format,
 		output_frame->width, output_frame->height, output_frame->format,
-		SWS_LANCZOS, NULL, NULL, NULL);
+		SWS_BICUBIC, NULL, NULL, NULL);
 	if (sws_ctx == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
