@@ -584,7 +584,7 @@ thumb_grabber_resize_frame(thumb_grabber_state_t* state)
 	sws_ctx = sws_getContext(
 		input_frame->width, input_frame->height, input_frame->format,
 		output_frame->width, output_frame->height, output_frame->format,
-		SWS_BICUBIC, NULL, NULL, NULL);
+		SWS_LANCZOS, NULL, NULL, NULL);
 	if (sws_ctx == NULL)
 	{
 		vod_log_error(VOD_LOG_ERR, state->request_context->log, 0,
