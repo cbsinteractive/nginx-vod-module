@@ -174,9 +174,9 @@ thumb_grabber_init_encoder(
 	encoder->time_base = (AVRational){ 1, 1 };
 	encoder->pix_fmt = AV_PIX_FMT_YUVJ420P;
 	encoder->qmin           = encoder->qmax = 100;
-	encoder->mb_lmin        = encoder->lmin = encoder->qmin * 118;
-	encoder->mb_lmax        = encoder->lmax = encoder->qmax * 118;
-	encoder->flags          = CODEC_FLAG_QSCALE;
+	encoder->mb_lmin        = encoder->qmin * 118;
+	encoder->mb_lmax        = encoder->qmax * 118;
+	encoder->flags          = AV_CODEC_FLAG_QSCALE;
 	encoder->global_quality = encoder->qmin * 118;
 
 	avrc = avcodec_open2(encoder, encoder_codec, NULL);
