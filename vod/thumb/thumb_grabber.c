@@ -137,12 +137,6 @@ thumb_grabber_init_decoder(
 	decoder->extradata_size = media_info->extra_data.len;
 	decoder->width = media_info->u.video.width;
 	decoder->height = media_info->u.video.height;
-	decoder->qmin           = decoder->qmax = 1;
-	decoder->mb_lmin        = decoder->qmin * 118;
-	decoder->mb_lmax        = decoder->qmax * 118;
-	decoder->flags          = AV_CODEC_FLAG_QSCALE;
-	decoder->global_quality = decoder->qmin * 118;
-
 
 	avrc = avcodec_open2(decoder, decoder_codec[media_info->codec_id], NULL);
 	if (avrc < 0)
