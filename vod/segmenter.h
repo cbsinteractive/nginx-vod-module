@@ -84,7 +84,7 @@ typedef vod_status_t (*segmenter_get_segment_durations_t)(
 struct segmenter_conf_s {
 	// config fields
 	uintptr_t segment_duration;
-	vod_array_t* bootstrap_segments;							// array of vod_str_t
+	vod_array_t* bootstrap_segments;		// array of vod_str_t
 	bool_t align_to_key_frames;
 	intptr_t live_window_duration;
 	segmenter_get_segment_count_t get_segment_count;			// last short / last long / last rounded
