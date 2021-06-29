@@ -143,13 +143,15 @@ segmenter_get_segment_count_last_short(
 		if (conf->segment_count_last_short_threshold_ms > 0)
 		{
 			mod = duration_millis % conf->segment_duration;
-			if (mod < conf->segment_count_last_short_threshold_ms) {
-				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "appending short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
-				result -= 1;
-			}
-			else
-			{
-				vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "splitting short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
+			if (mod > 0) {
+				if (mod < conf->segment_count_last_short_threshold_ms) {
+					vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "appending short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
+					result -= 1;
+				}
+				else
+				{
+					vod_log_debug2(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "splitting short segment with dur: %uD, threshold: %uD", mod, conf->segment_count_last_short_threshold_ms);
+				}
 			}
 		}
 	}
