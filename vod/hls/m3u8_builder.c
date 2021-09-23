@@ -923,7 +923,7 @@ m3u8_builder_ext_x_media_tags_write(
 			label);
 
 		p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
-			lang_get_rfc_5646_name(tracks[media_type]->media_info.language;));
+			lang_get_rfc_5646_name(tracks[media_type]->media_info.language));
 
 		if (adaptation_set == first_adaptation_set)
 		{
