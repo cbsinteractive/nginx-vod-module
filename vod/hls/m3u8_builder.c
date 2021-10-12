@@ -911,8 +911,7 @@ m3u8_builder_ext_x_media_tags_write(
 		}
 
 		label = &tracks[media_type]->media_info.label;
-		if (label->len == 0 ||
-			(media_type == MEDIA_TYPE_AUDIO && !adaptation_sets->multi_audio))
+		if (label->len == 0)
 		{
 			label = &default_label;
 		}
@@ -923,11 +922,8 @@ m3u8_builder_ext_x_media_tags_write(
 			group_index,
 			label);
 
-		if (media_type != MEDIA_TYPE_AUDIO || adaptation_sets->multi_audio)
-		{
-			p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
-				lang_get_rfc_5646_name(tracks[media_type]->media_info.language));
-		}
+		p = vod_sprintf(p, M3U8_EXT_MEDIA_LANG,
+			lang_get_rfc_5646_name(tracks[media_type]->media_info.language));
 
 		if (adaptation_set == first_adaptation_set)
 		{
