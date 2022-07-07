@@ -300,10 +300,6 @@ filter_init_filtered_clips(
 			vod_memzero(track_count, sizeof(track_count));
 			filter_get_clip_track_count(*cur_clip, track_count);
 
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-						"filter_init_filtered_clips: track count mismatch, first clip had %uD current clip has %uD media type %uD",
-						sequence->track_count[media_type], track_count[media_type], media_type);
-
 			if (!media_clip_is_source(cur_clip[0]->type) && track_count[MEDIA_TYPE_AUDIO] > 1)
 			{
 				track_count[MEDIA_TYPE_AUDIO] = 1;		// audio filtering supports only a single output track
