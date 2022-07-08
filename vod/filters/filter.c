@@ -311,9 +311,9 @@ filter_init_filtered_clips(
 				continue;
 			}
 
-			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
-				"*** hello ***%c",
-				media_set);
+			printf("\n\n\n***")
+			printf(media_set)
+			printf("\n\n\n***")
 
 			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 			{
