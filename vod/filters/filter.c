@@ -300,7 +300,9 @@ filter_init_filtered_clips(
 			vod_memzero(track_count, sizeof(track_count));
 			filter_get_clip_track_count(*cur_clip, track_count);
 
-			printf("\n\n\n***%V\n\n\n***", media_set->sources_head->uri);
+			vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+						"\n\n\n***%V\n\n\n***",
+						media_set->sources_head->uri);
 
 			if (!media_clip_is_source(cur_clip[0]->type) && track_count[MEDIA_TYPE_AUDIO] > 1)
 			{
