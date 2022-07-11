@@ -301,7 +301,7 @@ filter_init_filtered_clips(
 			filter_get_clip_track_count(*cur_clip, track_count);
 
 			printf("\n\n\n***");
-			printf(media_set->sources_head->uri);
+			printf("%s", media_set->sources_head->uri);
 			printf("\n\n\n***");
 
 			if (!media_clip_is_source(cur_clip[0]->type) && track_count[MEDIA_TYPE_AUDIO] > 1)
