@@ -300,6 +300,10 @@ filter_init_filtered_clips(
 			vod_memzero(track_count, sizeof(track_count));
 			filter_get_clip_track_count(*cur_clip, track_count);
 
+			printf("\n\n\n***");
+			printf(media_set->sources_head->uri);
+			printf("\n\n\n***");
+
 			if (!media_clip_is_source(cur_clip[0]->type) && track_count[MEDIA_TYPE_AUDIO] > 1)
 			{
 				track_count[MEDIA_TYPE_AUDIO] = 1;		// audio filtering supports only a single output track
@@ -310,10 +314,6 @@ filter_init_filtered_clips(
 				vod_memcpy(sequence->track_count, track_count, sizeof(sequence->track_count));
 				continue;
 			}
-
-			printf("\n\n\n***");
-			printf(media_set);
-			printf("\n\n\n***");
 
 			for (media_type = 0; media_type < MEDIA_TYPE_COUNT; media_type++)
 			{
