@@ -539,7 +539,6 @@ static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 // textalign and displayalign are rulesets on how we convert between
 // dfxp tags to webvtt values.
 enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT, TA_NULL};
->>>>>>> master
 	[TA_DEFAULT] = {"", "textAlign", " "},
 	[TA_START]   = {"start", "textAlign",  " position:15% align:start "},
 	[TA_CENTER]  = {"center", "textAlign", " position:50% align:middle"},
