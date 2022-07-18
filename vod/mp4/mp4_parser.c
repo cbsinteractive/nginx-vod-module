@@ -76,6 +76,7 @@ typedef struct {
 	atom_info_t dinf;
 	atom_info_t elst;
 	atom_info_t tkhd;
+	atom_info_t udta_name;
 } trak_atom_infos_t;
 
 typedef struct {
@@ -191,11 +192,17 @@ static const relevant_atom_t relevant_atoms_edts[] = {
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
+static const relevant_atom_t relevant_atoms_udta[] = {
+	{ ATOM_NAME_NAME, offsetof(trak_atom_infos_t, udta_name), NULL },
+	{ ATOM_NAME_NULL, 0, NULL }
+};
+
 static const relevant_atom_t relevant_atoms_trak[] = {
 	{ ATOM_NAME_MDIA, 0, relevant_atoms_mdia },
 	{ ATOM_NAME_EDTS, 0, relevant_atoms_edts },
 	{ ATOM_NAME_TKHD, offsetof(trak_atom_infos_t, tkhd), NULL },
 	{ ATOM_NAME_SENC, offsetof(trak_atom_infos_t, senc), NULL },
+	{ ATOM_NAME_UDTA, 0, relevant_atoms_udta },
 	{ ATOM_NAME_NULL, 0, NULL }
 };
 
@@ -207,8 +214,6 @@ typedef struct {
 static const raw_atom_mapping_t raw_atom_mapping[] = {
 	{ RTA_STSD, offsetof(trak_atom_infos_t, stsd) },
 };
-
-static const uint16_t ac3_mode_channels[] = { 2, 1, 2, 3, 3, 4, 4, 5 };
 
 // compressed moov
 typedef struct {
@@ -274,8 +279,8 @@ mp4_parser_parse_hdlr_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 		break;
 	}
 	
-	// parse the name
-	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0)
+	// parse the name / already set
+	if ((context->parse_params.parse_type & PARSE_FLAG_HDLR_NAME) == 0 || context->media_info.label.data != NULL)
 	{
 		return VOD_OK;
 	}
@@ -519,11 +524,48 @@ mp4_parser_parse_mdhd_atom(atom_info_t* atom_info, metadata_parse_context_t* con
 	context->media_info.frames_timescale = timescale;
 	context->media_info.full_duration = duration;
 	context->media_info.duration_millis = rescale_time(duration, timescale, 1000);
+
 	context->media_info.language = lang_parse_iso639_3_code(language);
-	if (context->media_info.label.len == 0)
+	if (context->media_info.language != 0)
 	{
-		lang_get_native_name(context->media_info.language, &context->media_info.label);
+		context->media_info.lang_str.data = (u_char *)lang_get_rfc_5646_name(context->media_info.language);
+		context->media_info.lang_str.len = ngx_strlen(context->media_info.lang_str.data);
+
+		if (context->media_info.label.len == 0)
+		{
+			lang_get_native_name(context->media_info.language, &context->media_info.label);
+		}
 	}
+
+	return VOD_OK;
+}
+
+static vod_status_t
+mp4_parser_parse_udta_name_atom(atom_info_t* atom_info, metadata_parse_context_t* context)
+{
+	vod_str_t name;
+	name.data = (u_char*)atom_info->ptr;
+	name.len = atom_info->size;
+
+	// atom empty/non-existent or name already set
+	if (name.len == 0 || context->media_info.label.data != NULL)
+	{
+		return VOD_OK;
+	}
+
+	context->media_info.label.data = vod_alloc(
+		context->request_context->pool,
+		name.len + 1);
+	if (context->media_info.label.data == NULL)
+	{
+		vod_log_debug0(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
+			"mp4_parser_parse_udta_name_atom: vod_alloc failed");
+		return VOD_ALLOC_FAILED;
+	}
+
+	vod_memcpy(context->media_info.label.data, name.data, name.len);
+	context->media_info.label.data[name.len] = '\0';
+	context->media_info.label.len = name.len;
 
 	return VOD_OK;
 }
@@ -1954,11 +1996,24 @@ static vod_status_t
 mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 {
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
+	dovi_video_media_info_t* dovi;
 	
 	switch (atom_info->name)
 	{
 	case ATOM_NAME_SINF:
 		return mp4_parser_parse_sinf_atom(atom_info, context);
+
+	case ATOM_NAME_DVCC:
+	case ATOM_NAME_DVVC:
+		if (atom_info->size <= 3)
+		{
+			return VOD_OK;
+		}
+
+		dovi = &context->media_info.u.video.dovi;
+		dovi->profile = atom_info->ptr[2] >> 1;
+		dovi->level = ((atom_info->ptr[2] & 1) << 5) | (atom_info->ptr[3] >> 3);
+		return VOD_OK;
 
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
@@ -2027,7 +2082,6 @@ mp4_parser_parse_es_descriptor(simple_read_stream_t* stream)							// ff_mp4_par
 static vod_status_t 
 mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read_stream_t* stream)		// ff_mp4_read_dec_config_descr
 {
-	mp4a_config_t* codec_config;
 	vod_status_t rc;
 	unsigned len;
 	int tag;
@@ -2048,28 +2102,64 @@ mp4_parser_read_config_descriptor(metadata_parse_context_t* context, simple_read
 		context->media_info.extra_data.len = len;
 		context->media_info.extra_data.data = (u_char*)stream->cur_pos;
 
-		codec_config = &context->media_info.u.audio.codec_config;
 		rc = codec_config_mp4a_config_parse(
 			context->request_context, 
 			&context->media_info.extra_data, 
-			codec_config);
+			&context->media_info);
 		if (rc != VOD_OK)
 		{
 			return rc;
 		}
-
-		vod_log_debug3(VOD_LOG_DEBUG_LEVEL, context->request_context->log, 0,
-			"mp4_parser_read_config_descriptor: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
-			codec_config->object_type, codec_config->sample_rate_index, codec_config->channel_config);
 	}
 	
 	return VOD_OK;
 }
 
-static uint16_t
-mp4_parser_get_ac3_channel_count(uint8_t mode, uint8_t low_freq)
+static uint64_t
+mp4_parser_get_ac3_channel_layout(uint8_t acmod, uint8_t lfeon, uint16_t chan_loc)
 {
-	return ac3_mode_channels[mode] + low_freq;
+	static uint64_t acmod_channel_layout[] = {
+		VOD_CH_LAYOUT_STEREO,
+		VOD_CH_LAYOUT_MONO,
+		VOD_CH_LAYOUT_STEREO,
+		VOD_CH_LAYOUT_SURROUND,
+		VOD_CH_LAYOUT_2_1,
+		VOD_CH_LAYOUT_4POINT0,
+		VOD_CH_LAYOUT_2_2,
+		VOD_CH_LAYOUT_5POINT0
+	};
+
+	static uint64_t lfeon_channel_layout[] = {
+		0,
+		VOD_CH_LOW_FREQUENCY
+	};
+
+	static uint64_t chan_loc_channel_layout[] = {
+		VOD_CH_FRONT_LEFT_OF_CENTER | VOD_CH_FRONT_RIGHT_OF_CENTER,
+		VOD_CH_BACK_LEFT | VOD_CH_BACK_RIGHT,
+		VOD_CH_BACK_CENTER,
+		VOD_CH_TOP_CENTER,
+		VOD_CH_SURROUND_DIRECT_LEFT | VOD_CH_SURROUND_DIRECT_RIGHT,
+		VOD_CH_WIDE_LEFT | VOD_CH_WIDE_RIGHT,
+		VOD_CH_TOP_FRONT_LEFT | VOD_CH_TOP_FRONT_RIGHT,
+		VOD_CH_TOP_FRONT_CENTER,
+		VOD_CH_LOW_FREQUENCY_2,
+	};
+
+	uint64_t result;
+	uint32_t i;
+
+	result = acmod_channel_layout[acmod] | lfeon_channel_layout[lfeon];
+
+	for (i = 0; i < vod_array_entries(chan_loc_channel_layout); i++)
+	{
+		if (chan_loc & (1 << i))
+		{
+			result |= chan_loc_channel_layout[i];
+		}
+	}
+
+	return result;
 }
 
 static vod_status_t
@@ -2123,8 +2213,10 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 	metadata_parse_context_t* context = (metadata_parse_context_t*)ctx;
 	simple_read_stream_t stream;
 	vod_status_t rc;
-	uint8_t ac3_low_freq;
-	uint8_t ac3_mode;
+	uint64_t channel_layout;
+	uint16_t chan_loc;
+	uint8_t acmod;
+	uint8_t lfeon;
 	int tag;
 
 	switch (atom_info->name)
@@ -2139,28 +2231,47 @@ mp4_parser_parse_audio_atoms(void* ctx, atom_info_t* atom_info)
 		break;			// handled outside the switch
 
 	case ATOM_NAME_DAC3:
-		if (atom_info->size > 1)
+		if (atom_info->size <= 1)
 		{
-			ac3_mode = (atom_info->ptr[1] >> 3) & 0x7;
-			ac3_low_freq = (atom_info->ptr[1] >> 2) & 0x1;
-			context->media_info.u.audio.channels =
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
+			return VOD_OK;
 		}
+
+		acmod = (atom_info->ptr[1] >> 3) & 0x7;
+		lfeon = (atom_info->ptr[1] >> 2) & 0x1;
+
+		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, 0);
+
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits64(channel_layout);
+		context->media_info.u.audio.channel_layout = channel_layout;
 		return VOD_OK;
 
 	case ATOM_NAME_DEC3:
-		if (atom_info->size > 3)
+		if (atom_info->size <= 3)
 		{
-			ac3_mode = (atom_info->ptr[3] >> 1) & 0x7;
-			ac3_low_freq = (atom_info->ptr[3]) & 0x1;
-			context->media_info.u.audio.channels =
-				mp4_parser_get_ac3_channel_count(ac3_mode, ac3_low_freq);
-
-			// set the extra data to the contents of this atom, since it's used 
-			// as the setup info in hls/sample-aes
-			context->media_info.extra_data.len = atom_info->size;
-			context->media_info.extra_data.data = (u_char*)atom_info->ptr;
+			return VOD_OK;
 		}
+
+		acmod = (atom_info->ptr[3] >> 1) & 0x7;
+		lfeon = (atom_info->ptr[3]) & 0x1;
+
+		if (atom_info->size > 5 && (atom_info->ptr[4] >> 1) & 0xf)  // num_dep_sub
+		{
+			chan_loc = (atom_info->ptr[4] & 0x1) << 8 | atom_info->ptr[5];
+		}
+		else
+		{
+			chan_loc = 0;
+		}
+
+		channel_layout = mp4_parser_get_ac3_channel_layout(acmod, lfeon, chan_loc);
+
+		context->media_info.u.audio.channels = vod_get_number_of_set_bits64(channel_layout);
+		context->media_info.u.audio.channel_layout = channel_layout;
+
+		// set the extra data to the contents of this atom, since it's used
+		// as the setup info in hls/sample-aes
+		context->media_info.extra_data.len = atom_info->size;
+		context->media_info.extra_data.data = (u_char*)atom_info->ptr;
 		return VOD_OK;
 
 	default:
@@ -2616,6 +2727,16 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		return rc;
 	}
 
+	// udta stream name
+	if ((context->parse_params.parse_type & PARSE_FLAG_UDTA_NAME) != 0)
+	{
+		rc = mp4_parser_parse_udta_name_atom(&trak_atom_infos.udta_name, &metadata_parse_context);
+		if (rc != VOD_OK)
+		{
+			return rc;
+		}
+	}
+
 	// get the codec type and extra data
 	rc = mp4_parser_parse_stsd_atom(&trak_atom_infos.stsd, &metadata_parse_context);
 	if (rc != VOD_OK)
@@ -2634,11 +2755,13 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 		case FORMAT_AVC1:
 		case FORMAT_h264:
 		case FORMAT_H264:
+		case FORMAT_DVA1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_AVC;
 			break;
 
 		case FORMAT_HEV1:
 		case FORMAT_HVC1:
+		case FORMAT_DVH1:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_HEVC;
 			break;
 
@@ -2685,6 +2808,11 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		case FORMAT_EAC3:
 			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_EAC3;
+			extra_data_required = FALSE;
+			break;
+
+		case FORMAT_FLAC:
+			metadata_parse_context.media_info.codec_id = VOD_CODEC_ID_FLAC;
 			extra_data_required = FALSE;
 			break;
 
@@ -2741,15 +2869,16 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 
 		// Note: it is not possible for the sequence to have a language without a label,
 		//              since a default label will be assigned according to the language
-		if (sequence->language != 0)
+		if (sequence->lang_str.len != 0)
 		{
+			metadata_parse_context.media_info.lang_str = sequence->lang_str;
 			metadata_parse_context.media_info.language = sequence->language;
 		}
 	}
 
 	// check whether we should include this track
 	track_index = context->track_indexes[metadata_parse_context.media_info.media_type]++;
-	if ((context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type] & (1 << track_index)) == 0)
+	if (!vod_is_bit_set(context->parse_params.required_tracks_mask[metadata_parse_context.media_info.media_type], track_index))
 	{
 		return VOD_OK;
 	}
@@ -2812,10 +2941,10 @@ mp4_parser_process_moov_atom_callback(void* ctx, atom_info_t* atom_info)
 	}
 
 	// add to the result array
-	if (result->base.tracks.nelts >= MAX_TRACK_COUNT)
+	if (result->base.tracks.nelts > MAX_TRACK_COUNT)
 	{
 		vod_log_error(VOD_LOG_ERR, context->request_context->log, 0,
-			"mp4_parser_process_moov_atom_callback: track count exceeded the limit");
+			"mp4_parser_process_moov_atom_callback: track count exceeded the limit of %i", (ngx_int_t)MAX_TRACK_COUNT);
 		return VOD_BAD_REQUEST;
 	}
 
