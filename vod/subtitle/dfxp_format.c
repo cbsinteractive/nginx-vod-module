@@ -538,7 +538,7 @@ static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 
 // textalign and displayalign are rulesets on how we convert between
 // dfxp tags to webvtt values.
-enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT};
+enum textalign_kind {TA_DEFAULT, TA_START, TA_CENTER, TA_END, TA_LEFT, TA_RIGHT, TA_NULL};
 static struct{char *name, *attr, *vtt;} textaligntab[] = {
 	[TA_DEFAULT] = {"", "textAlign", " "},
 	[TA_START]   = {"start", "textAlign",  " position:15% align:start "},
@@ -546,16 +546,16 @@ static struct{char *name, *attr, *vtt;} textaligntab[] = {
 	[TA_END]     = {"end", "textAlign",    " size:100% position:85% align:end"},
 	[TA_LEFT]    = {"left", "textAlign",   " position:15% align:start"},
 	[TA_RIGHT]   = {"right", "textAlign",  " size:100% position:85% align:end"},
-	[NULL] = {NULL, NULL, NULL},
+	[TA_NULL] = {NULL, NULL, NULL},
 };
 
-enum displayalign_kind {DA_DEFAULT, DA_BEFORE, DA_CENTER, DA_AFTER};
+enum displayalign_kind {DA_DEFAULT, DA_BEFORE, DA_CENTER, DA_AFTER, DA_NULL};
 static struct{char *name, *attr, *vtt;} displayaligntab[] = {
 	[DA_DEFAULT] = {"", "displayAlign", " "},
 	[DA_BEFORE]= {"before", "displayAlign", " line:10%"},
 	[DA_CENTER]= {"center", "displayAlign", " line:50%"},
 	[DA_AFTER]= {"after", "displayAlign", " line:100%"},
-	[NULL] = {NULL, NULL, NULL},
+	[DA_NULL]= {NULL, NULL, NULL},
 };
 
 // Each region imports the "defaultSpeaker" style, but that's just bold text. This means the three
