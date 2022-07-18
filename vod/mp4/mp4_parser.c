@@ -2009,7 +2009,11 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 		{
 			return VOD_OK;
 		}
-
+	    if atom_info->name == ATOM_NAME_DVCC
+	    {
+			context->media_info.dvcc_data.len = atom_info->size;
+			context->media_info.dvcc_data.data = (u_char*)atom_info->ptr;
+		}
 		dovi = &context->media_info.u.video.dovi;
 		dovi->profile = atom_info->ptr[2] >> 1;
 		dovi->level = ((atom_info->ptr[2] & 1) << 5) | (atom_info->ptr[3] >> 3);
@@ -2017,12 +2021,6 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 
 	case ATOM_NAME_AVCC:
 	case ATOM_NAME_HVCC:
-		break;
-	case ATOM_NAME_DVCC:
-		context->media_info.dvcc_data.len = atom_info->size;
-		context->media_info.dvcc_data.data = (u_char*)atom_info->ptr;
-		return VOD_OK;
-
 	case ATOM_NAME_VPCC:
 	case ATOM_NAME_AV1C:
 		break;			// handled outside the switch
