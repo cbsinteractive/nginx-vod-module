@@ -11,10 +11,27 @@
 #define rescale_time(time, cur_scale, new_scale) ((((uint64_t)(time)) * (new_scale) + (cur_scale) / 2) / (cur_scale))
 #define rescale_time_neg(time, cur_scale, new_scale) ((time) >= 0 ? rescale_time(time, cur_scale, new_scale) : -rescale_time(-(time), cur_scale, new_scale))
 
+#define vod_track_mask_set_all_bits(mask) vod_set_all_bits((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_reset_all_bits(mask) vod_reset_all_bits((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_get_number_of_set_bits(mask) vod_get_number_of_set_bits_in_mask((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_are_all_bits_set(mask) vod_are_all_bits_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_is_any_bit_set(mask) vod_is_any_bit_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_get_lowest_bit_set(mask) vod_get_lowest_bit_set((mask), MAX_TRACK_COUNT)
+#define vod_track_mask_and_bits(dst, a, b) vod_and_bits((dst), (a), (b), MAX_TRACK_COUNT)
+
 // constants
 #define MAX_CODEC_NAME_SIZE (64)
 #define MAX_FRAME_SIZE (10 * 1024 * 1024)
-#define MAX_TRACK_COUNT (1024)
+#ifdef NGX_VOD_MAX_TRACK_COUNT
+#if NGX_VOD_MAX_TRACK_COUNT % 64 != 0
+#error MAX_TRACK_COUNT must be a multiple of 64!
+#endif
+#define MAX_TRACK_COUNT (NGX_VOD_MAX_TRACK_COUNT)
+#define MAX_TRACK_INDEX_LEN (sizeof(ngx_value(NGX_VOD_MAX_TRACK_COUNT)) - 1)
+#else
+#define MAX_TRACK_COUNT (64)
+#define MAX_TRACK_INDEX_LEN (2)
+#endif
 #define MAX_DURATION_SEC (1000000)
 #define MAX_CLIP_DURATION (90000000)		// 25h
 #define MAX_SEQUENCE_DURATION (864000000)		// 10 days
@@ -33,7 +50,8 @@
 #define PARSE_FLAG_SAVE_RAW_ATOMS		(0x00000010)		// mp4 only
 #define PARSE_FLAG_EDIT_LIST			(0x00000020)
 #define PARSE_FLAG_HDLR_NAME			(0x00000040)
-#define PARSE_FLAG_CODEC_TRANSFER_CHAR	(0x00000080)
+#define PARSE_FLAG_UDTA_NAME			(0x00000080)
+#define PARSE_FLAG_CODEC_TRANSFER_CHAR	(0x00000100)
 
 // frames
 #define PARSE_FLAG_FRAMES_DURATION		(0x00010000)
@@ -64,6 +82,42 @@
 #define REQUEST_FLAG_NO_DISCONTINUITY				(0x20)
 #define REQUEST_FLAG_FORCE_PLAYLIST_TYPE_VOD		(0x40)
 
+// audio channels (aligned with ffmpeg AV_CH_XXX)
+#define VOD_CH_FRONT_LEFT				0x00000001
+#define VOD_CH_FRONT_RIGHT				0x00000002
+#define VOD_CH_FRONT_CENTER				0x00000004
+#define VOD_CH_LOW_FREQUENCY			0x00000008
+#define VOD_CH_BACK_LEFT				0x00000010
+#define VOD_CH_BACK_RIGHT				0x00000020
+#define VOD_CH_FRONT_LEFT_OF_CENTER		0x00000040
+#define VOD_CH_FRONT_RIGHT_OF_CENTER	0x00000080
+#define VOD_CH_BACK_CENTER				0x00000100
+#define VOD_CH_SIDE_LEFT				0x00000200
+#define VOD_CH_SIDE_RIGHT				0x00000400
+#define VOD_CH_TOP_CENTER				0x00000800
+#define VOD_CH_TOP_FRONT_LEFT			0x00001000
+#define VOD_CH_TOP_FRONT_CENTER			0x00002000
+#define VOD_CH_TOP_FRONT_RIGHT			0x00004000
+#define VOD_CH_TOP_BACK_LEFT			0x00008000
+#define VOD_CH_TOP_BACK_CENTER			0x00010000
+#define VOD_CH_TOP_BACK_RIGHT			0x00020000
+#define VOD_CH_WIDE_LEFT				0x0000000080000000ULL
+#define VOD_CH_WIDE_RIGHT				0x0000000100000000ULL
+#define VOD_CH_SURROUND_DIRECT_LEFT		0x0000000200000000ULL
+#define VOD_CH_SURROUND_DIRECT_RIGHT	0x0000000400000000ULL
+#define VOD_CH_LOW_FREQUENCY_2			0x0000000800000000ULL
+
+#define VOD_CH_LAYOUT_MONO				(VOD_CH_FRONT_CENTER)
+#define VOD_CH_LAYOUT_STEREO		  	(VOD_CH_FRONT_LEFT|VOD_CH_FRONT_RIGHT)
+#define VOD_CH_LAYOUT_SURROUND			(VOD_CH_LAYOUT_STEREO|VOD_CH_FRONT_CENTER)
+#define VOD_CH_LAYOUT_2_1			 	(VOD_CH_LAYOUT_STEREO|VOD_CH_BACK_CENTER)
+#define VOD_CH_LAYOUT_4POINT0		 	(VOD_CH_LAYOUT_SURROUND|VOD_CH_BACK_CENTER)
+#define VOD_CH_LAYOUT_2_2			 	(VOD_CH_LAYOUT_STEREO|VOD_CH_SIDE_LEFT|VOD_CH_SIDE_RIGHT)
+#define VOD_CH_LAYOUT_5POINT0		 	(VOD_CH_LAYOUT_SURROUND|VOD_CH_SIDE_LEFT|VOD_CH_SIDE_RIGHT)
+#define VOD_CH_LAYOUT_5POINT0_BACK	  	(VOD_CH_LAYOUT_SURROUND|VOD_CH_BACK_LEFT|VOD_CH_BACK_RIGHT)
+#define VOD_CH_LAYOUT_5POINT1_BACK	  	(VOD_CH_LAYOUT_5POINT0_BACK|VOD_CH_LOW_FREQUENCY)
+#define VOD_CH_LAYOUT_7POINT1_WIDE_BACK	(VOD_CH_LAYOUT_5POINT1_BACK|VOD_CH_FRONT_LEFT_OF_CENTER|VOD_CH_FRONT_RIGHT_OF_CENTER)
+
 #define VOD_CODEC_FLAG(name) (1 << (VOD_CODEC_ID_##name - 1))
 
 #define vod_codec_in_mask(codec_id, mask) (((mask) & (1 << ((codec_id) - 1))) != 0)
@@ -90,6 +144,7 @@ enum {
 	VOD_CODEC_ID_VORBIS,
 	VOD_CODEC_ID_OPUS,
 	VOD_CODEC_ID_VOLUME_MAP,
+	VOD_CODEC_ID_FLAC,
 
 	// captions
 	VOD_CODEC_ID_SUBTITLE,
@@ -112,6 +167,9 @@ enum {			// mp4 only
 	RTA_COUNT
 };
 
+// types
+typedef uint64_t track_mask_t[vod_array_length_for_bits(MAX_TRACK_COUNT)];
+
 // parse params
 typedef struct {
 	uint64_t start;			// relative to clip_from
@@ -121,8 +179,8 @@ typedef struct {
 } media_range_t;
 
 typedef struct {
-	uint32_t* required_tracks_mask;
-	uint8_t* langs_mask;
+	track_mask_t* required_tracks_mask;
+	uint64_t* langs_mask;
 	uint32_t clip_from;
 	uint32_t clip_to;
 	media_range_t* range;
@@ -143,17 +201,24 @@ typedef struct {
 } raw_atom_t;
 
 typedef struct {
+	uint8_t profile;
+	uint8_t level;
+} dovi_video_media_info_t;
+
+typedef struct {
 	uint16_t width;
 	uint16_t height;
 	uint32_t nal_packet_size_length;
 	uint32_t initial_pts_delay;
 	uint32_t key_frame_bitrate;
 	uint8_t transfer_characteristics;
+	dovi_video_media_info_t dovi;
 } video_media_info_t;
 
 typedef struct {
 	uint8_t object_type_id;
 	uint16_t channels;
+	uint64_t channel_layout;
 	uint16_t bits_per_sample;
 	uint16_t packet_size;
 	uint32_t sample_rate;
@@ -180,6 +245,7 @@ typedef struct media_info_s {
 	int64_t start_time;			// temporary during parsing
 	uint64_t codec_delay;
 	language_id_t language;
+	vod_str_t lang_str;
 	vod_str_t label;
 	union {
 		video_media_info_t video;
@@ -280,7 +346,7 @@ typedef struct {
 
 	// metadata reader
 	vod_status_t(*init_metadata_reader)(
-		request_context_t* request_context, 
+		request_context_t* request_context,
 		vod_str_t* buffer,
 		size_t max_metadata_size,
 		void** ctx);

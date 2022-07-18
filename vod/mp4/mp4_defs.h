@@ -35,6 +35,7 @@
 #define ATOM_NAME_AVCC (0x43637661)		// advanced video codec configuration
 #define ATOM_NAME_HVCC (0x43637668)		// high efficiency video codec configuration
 #define ATOM_NAME_DVCC (0x43637664)		// dolby vision codec configuration
+#define ATOM_NAME_DVVC (0x43767664)		// dolby vision codec configuration
 #define ATOM_NAME_VPCC (0x43637076)		// vp9 codec configuration
 #define ATOM_NAME_AV1C (0x43317661)		// av1 codec configuration
 #define ATOM_NAME_ESDS (0x73647365)		// elementary stream description
@@ -50,6 +51,8 @@
 #define ATOM_NAME_DCOM (0x6d6f6364)		// data compression
 #define ATOM_NAME_CMVD (0x64766d63)		// compressed movie data
 #define ATOM_NAME_DOPS (0x73704f64)
+#define ATOM_NAME_UDTA (0x61746475)
+#define ATOM_NAME_NAME (0x656d616e)
 
 #define ATOM_NAME_NULL (0x00000000)
 
@@ -82,6 +85,7 @@
 #define FORMAT_AC3     (0x332d6361)
 #define FORMAT_EAC3    (0x332d6365)
 #define FORMAT_OPUS    (0x7375704f)
+#define FORMAT_FLAC    (0x43614c66)
 
 // encryption schemes
 #define SCHEME_TYPE_CENC (0x63656e63)

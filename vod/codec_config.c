@@ -1,7 +1,7 @@
 #include "codec_config.h"
 #include "media_format.h"
 #include "bit_read_stream.h"
-#include "./mp4/mp4_defs.h"
+#include "mp4/mp4_defs.h"
 
 #define codec_config_copy_string(target, str)	\
 	{											\
@@ -10,6 +10,28 @@
 	}
 
 #define AOT_ESCAPE (31)
+
+static const uint64_t aac_config_channel_layout[] = {
+	0,
+	VOD_CH_LAYOUT_MONO,
+	VOD_CH_LAYOUT_STEREO,
+	VOD_CH_LAYOUT_SURROUND,
+	VOD_CH_LAYOUT_4POINT0,
+	VOD_CH_LAYOUT_5POINT0_BACK,
+	VOD_CH_LAYOUT_5POINT1_BACK,
+	VOD_CH_LAYOUT_7POINT1_WIDE_BACK,
+};
+
+static uint16_t aac_config_channel_count[] = {
+	0,
+	1,
+	2,
+	3,
+	4,
+	5,
+	6,
+	8,
+};
 
 vod_status_t 
 codec_config_avcc_get_nal_units(
@@ -434,15 +456,106 @@ codec_config_get_hevc_codec_name(request_context_t* request_context, media_info_
 	return VOD_OK;
 }
 
+static vod_status_t
+codec_config_get_av1_codec_name(request_context_t* request_context, media_info_t* media_info)
+{
+	bit_reader_state_t reader;
+	uint32_t marker;
+	uint32_t version;
+	uint32_t seq_profile;
+	uint32_t seq_level_idx_0;
+	uint32_t seq_tier_0;
+	uint32_t high_bitdepth;
+	uint32_t twelve_bit;
+	uint32_t bit_depth;
+	u_char* p;
+
+	bit_read_stream_init(&reader, media_info->extra_data.data, media_info->extra_data.len);
+
+	marker = bit_read_stream_get(&reader, 1);
+	if (marker != 1)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_get_av1_codec_name: invalid marker %uD", marker);
+		return VOD_BAD_DATA;
+	}
+
+	version = bit_read_stream_get(&reader, 7);
+	if (version != 1)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_get_av1_codec_name: invalid version %uD", version);
+		return VOD_BAD_DATA;
+	}
+
+	seq_profile = bit_read_stream_get(&reader, 3);
+	seq_level_idx_0 = bit_read_stream_get(&reader, 5);
+	seq_tier_0 = bit_read_stream_get(&reader, 1);
+
+	high_bitdepth = bit_read_stream_get(&reader, 1);
+	twelve_bit = bit_read_stream_get(&reader, 1);
+
+	if (reader.stream.eof_reached)
+	{
+		vod_log_error(VOD_LOG_ERR, request_context->log, 0,
+			"codec_config_get_av1_codec_name: overflow while parsing av1 config");
+		return VOD_BAD_DATA;
+	}
+
+	bit_depth = twelve_bit ? 12 : (high_bitdepth ? 10 : 8);
+
+	p = vod_sprintf(media_info->codec_name.data, "%*s.%uD.%02uD%c.%02uD",
+		(size_t)sizeof(uint32_t),
+		&media_info->format,
+		seq_profile,
+		seq_level_idx_0,
+		seq_tier_0 ? 'H' : 'M',
+		bit_depth);
+
+	media_info->codec_name.len = p - media_info->codec_name.data;
+
+	return VOD_OK;
+}
+
+static vod_status_t
+codec_config_get_dovi_codec_name(request_context_t* request_context, media_info_t* media_info)
+{
+	dovi_video_media_info_t* dovi;
+	u_char* p;
+
+	dovi = &media_info->u.video.dovi;
+
+	p = vod_sprintf(media_info->codec_name.data, "%*s.%02uD.%02uD",
+		(size_t)sizeof(uint32_t),
+		&media_info->format,
+		(uint32_t)dovi->profile,
+		(uint32_t)dovi->level);
+
+	media_info->codec_name.len = p - media_info->codec_name.data;
+
+	return VOD_OK;
+}
+
+
 vod_status_t
 codec_config_get_video_codec_name(request_context_t* request_context, media_info_t* media_info)
 {
 	switch (media_info->codec_id)
 	{
 	case VOD_CODEC_ID_AVC:
+		if (media_info->format == FORMAT_DVA1)
+		{
+			return codec_config_get_dovi_codec_name(request_context, media_info);
+		}
+
 		return codec_config_get_avc_codec_name(request_context, media_info);
 
 	case VOD_CODEC_ID_HEVC:
+		if (media_info->format == FORMAT_DVH1)
+		{
+			return codec_config_get_dovi_codec_name(request_context, media_info);
+		}
+
 		return codec_config_get_hevc_codec_name(request_context, media_info);
 
 	case VOD_CODEC_ID_VP8:
@@ -454,8 +567,7 @@ codec_config_get_video_codec_name(request_context_t* request_context, media_info
 		return VOD_OK;
 
 	case VOD_CODEC_ID_AV1:
-		codec_config_copy_string(media_info->codec_name, "av1");
-		return VOD_OK;
+		return codec_config_get_av1_codec_name(request_context, media_info);
 
 	default:
 		return VOD_UNEXPECTED;
@@ -509,6 +621,10 @@ codec_config_get_audio_codec_name(request_context_t* request_context, media_info
 		codec_config_copy_string(media_info->codec_name, "ec-3");
 		return VOD_OK;
 
+	case VOD_CODEC_ID_FLAC:
+		codec_config_copy_string(media_info->codec_name, "fLaC");
+		return VOD_OK;
+
 	default:
 		return codec_config_get_mp4a_codec_name(request_context, media_info);
 	}
@@ -518,23 +634,24 @@ vod_status_t
 codec_config_mp4a_config_parse(
 	request_context_t* request_context, 
 	vod_str_t* extra_data, 
-	mp4a_config_t* result)
+	media_info_t* media_info)
 {
 	bit_reader_state_t reader;
+	mp4a_config_t* config = &media_info->u.audio.codec_config;
 
 	vod_log_buffer(VOD_LOG_DEBUG_LEVEL, request_context->log, 0, "codec_config_mp4a_config_parse: extra data ", extra_data->data, extra_data->len);
 
 	bit_read_stream_init(&reader, extra_data->data, extra_data->len);
 
-	result->object_type = bit_read_stream_get(&reader, 5);
-	if (result->object_type == AOT_ESCAPE)
-		result->object_type = 32 + bit_read_stream_get(&reader, 6);
+	config->object_type = bit_read_stream_get(&reader, 5);
+	if (config->object_type == AOT_ESCAPE)
+		config->object_type = 32 + bit_read_stream_get(&reader, 6);
 
-	result->sample_rate_index = bit_read_stream_get(&reader, 4);
-	if (result->sample_rate_index == 0x0f)
+	config->sample_rate_index = bit_read_stream_get(&reader, 4);
+	if (config->sample_rate_index == 0x0f)
 		bit_read_stream_get(&reader, 24);
 
-	result->channel_config = bit_read_stream_get(&reader, 4);
+	config->channel_config = bit_read_stream_get(&reader, 4);
 
 	if (reader.stream.eof_reached)
 	{
@@ -542,6 +659,16 @@ codec_config_mp4a_config_parse(
 			"codec_config_mp4a_config_parse: failed to read all required audio extra data fields");
 		return VOD_BAD_DATA;
 	}
+
+	if (config->channel_config < vod_array_entries(aac_config_channel_layout))
+	{
+		media_info->u.audio.channels = aac_config_channel_count[config->channel_config];
+		media_info->u.audio.channel_layout = aac_config_channel_layout[config->channel_config];
+	}
+
+	vod_log_debug3(VOD_LOG_DEBUG_LEVEL, request_context->log, 0,
+		"codec_config_mp4a_config_parse: codec config: object_type=%d sample_rate_index=%d channel_config=%d",
+		config->object_type, config->sample_rate_index, config->channel_config);
 
 	return VOD_OK;
 }
