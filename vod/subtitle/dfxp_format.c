@@ -533,7 +533,7 @@ static struct{char *name, *attr; char *tag[2];} decorationtab[] = {
 	{"bold",      "fontWeight",     {"<b>","</b>"}},
 	{"italic",    "fontStyle",      {"<i>","</i>"}},
 	{"underline", "textDecoration", {"<u>","</u>"}},
-	{NULL},
+	{NULL, NULL, {NULL, NULL}},
 };
 
 // textalign and displayalign are rulesets on how we convert between
@@ -546,7 +546,7 @@ static struct{char *name, *attr, *vtt;} textaligntab[] = {
 	[TA_END]     = {"end", "textAlign",    " size:100% position:85% align:end"},
 	[TA_LEFT]    = {"left", "textAlign",   " position:15% align:start"},
 	[TA_RIGHT]   = {"right", "textAlign",  " size:100% position:85% align:end"},
-	{NULL},
+	[NULL] = {NULL, NULL, NULL},
 };
 
 enum displayalign_kind {DA_DEFAULT, DA_BEFORE, DA_CENTER, DA_AFTER};
@@ -555,17 +555,18 @@ static struct{char *name, *attr, *vtt;} displayaligntab[] = {
 	[DA_BEFORE]= {"before", "displayAlign", " line:10%"},
 	[DA_CENTER]= {"center", "displayAlign", " line:50%"},
 	[DA_AFTER]= {"after", "displayAlign", " line:100%"},
-	{NULL},
+	[NULL] = {NULL, NULL, NULL},
 };
 
 // Each region imports the "defaultSpeaker" style, but that's just bold text. This means the three
 // regions are all bold, center-weighted text, differing only by display alignment. The bold text is
 // technically a property of the hard-coded defaultSpeaker region; we set it in the style for simplicity.
+// TODO looks like `id` and `style` are referenced later so should declare here?
 static region regiontab[] = {
 	{"lowerThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_AFTER}}},	
 	{"middleThird", {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_CENTER}}},
 	{"upperThird",  {"defaultSpeaker", {DECO_SET_BOLD, TA_CENTER, DA_BEFORE}}},
-	{NULL},
+	{NULL, {NULL, {0, 0, 0}}},
 };
 
 static int
