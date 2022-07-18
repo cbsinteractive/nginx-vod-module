@@ -2009,7 +2009,7 @@ mp4_parser_parse_video_extra_data_atom(void* ctx, atom_info_t* atom_info)
 		{
 			return VOD_OK;
 		}
-	    if atom_info->name == ATOM_NAME_DVCC
+	    if (atom_info->name == ATOM_NAME_DVCC)
 	    {
 			context->media_info.dvcc_data.len = atom_info->size;
 			context->media_info.dvcc_data.data = (u_char*)atom_info->ptr;
