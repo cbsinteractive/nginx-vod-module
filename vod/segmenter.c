@@ -1844,8 +1844,9 @@ segmenter_get_segment_durations_accurate(
 	uint32_t duration_millis;
 	bool_t align_to_key_frames;
 
-	if (media_set->timing.durations != NULL)
+	/*if (media_set->timing.durations != NULL)
 	{
+		// TCV -- don't do this
 		// in case of a playlist fall back to estimate
 		return segmenter_get_segment_durations_estimate(
 			request_context,
@@ -1854,7 +1855,7 @@ segmenter_get_segment_durations_accurate(
 			sequence,
 			media_type,
 			result);
-	}
+	}*/
 
 	// get the maximum duration and main track (=first video track if exists, or first audio track otherwise)
 	if (sequence != NULL)
