@@ -624,7 +624,7 @@ ngx_http_vod_manifest_segment_durations_mode_command(ngx_conf_t *cf, ngx_command
 		vod_conf->segmenter.get_segment_durations = segmenter_get_segment_durations_accurate;
 		// TCV TESTING
 		ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-			"\n\n\n****** ACCURATE MODE ******\n\n\n";
+			"\n\n\n****** ACCURATE MODE ******\n\n\n");
 	}
 	else
 	{
