@@ -255,6 +255,7 @@ m3u8_builder_build_iframe_playlist(
 		return rc;
 	}
 
+	// get segment durations
 	if (segmenter_conf->align_to_key_frames)
 	{
 		rc = segmenter_get_segment_durations_accurate(
