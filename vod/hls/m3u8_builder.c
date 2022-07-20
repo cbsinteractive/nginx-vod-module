@@ -255,10 +255,8 @@ m3u8_builder_build_iframe_playlist(
 		return rc;
 	}
 
-	// get segment durations
-	// TCV
-	//if (segmenter_conf->align_to_key_frames)
-	//{
+	if (segmenter_conf->align_to_key_frames)
+	{
 		rc = segmenter_get_segment_durations_accurate(
 			request_context,
 			segmenter_conf,
@@ -266,8 +264,8 @@ m3u8_builder_build_iframe_playlist(
 			NULL,
 			MEDIA_TYPE_NONE,
 			&segment_durations);
-	//}
-/*	else
+	}
+	else
 	{
 		rc = segmenter_get_segment_durations_estimate(
 			request_context,
@@ -276,7 +274,7 @@ m3u8_builder_build_iframe_playlist(
 			NULL,
 			MEDIA_TYPE_NONE,
 			&segment_durations);
-	}*/
+	}
 
 	if (rc != VOD_OK)
 	{
